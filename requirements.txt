@@ -1,0 +1,17 @@
+torch
+torchvision
+transformers>=4.45
+huggingface_hub
+faiss-cpu
+numpy
+pillow
+pandas
+tabulate
+pyyaml
+tqdm
+matplotlib
+gradio
+sentencepiece
+protobuf
+accelerate
+anthropic

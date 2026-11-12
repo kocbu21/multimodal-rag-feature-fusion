@@ -1,0 +1,48 @@
+
+throttle:
+  gpu_sleep_s: 0.5
+
+encoder:
+  name: openai/clip-vit-base-patch32
+  device: cuda
+  batch_size: 16
+
+captioner:
+  enabled: true
+  name: florence-community/Florence-2-large#<MORE_DETAILED_CAPTION>
+  extra:
+    - Salesforce/blip-image-captioning-base
+    - Salesforce/blip-image-captioning-large
+    - florence-community/Florence-2-large#<DETAILED_CAPTION>
+  batch_size: 8
+  max_new_tokens: 30
+
+text_embedder:
+  enabled: true
+  name: BAAI/bge-base-en-v1.5
+
+reranker:
+  enabled: true
+  name: Salesforce/blip2-itm-vit-g-coco
+  top_k: 16
+  weight: 0.9
+
+store:
+  dir: indexes/default
+
+fusion:
+  alpha: 0.85
+  beta: 0.5
+  late_method: rrf
+  rrf_k: 60
+  center_modalities: false
+  text_weight: 0.3
+
+search:
+  top_k: 10
+  candidate_k: 100
+
+generator:
+  backend: none
+  model: claude-opus-5-5
+  max_context_items: 5
