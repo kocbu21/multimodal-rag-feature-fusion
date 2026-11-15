@@ -37,7 +37,7 @@ class ITMReranker:
         if self.blip2:
             from transformers import AutoProcessor, Blip2ForImageTextRetrieval
             self.processor = AutoProcessor.from_pretrained(name)
-            self.model = Blip2ForImageTextRetrieval.from_pretrained(name, dtype=self.dtype).to(device).eval()
+            self.model = Blip2ForImageTextRetrieval.from_pretrained(name, dtype=self.dtype, device_map={"": device}).eval()
         else:
             from transformers import BlipForImageTextRetrieval, BlipProcessor
             self.processor = BlipProcessor.from_pretrained(name)

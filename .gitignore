@@ -30,3 +30,4 @@ report/*.synctex.gz
 *.key
 *.pem
 secrets*
+data/coco5k/

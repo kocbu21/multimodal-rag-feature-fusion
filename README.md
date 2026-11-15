@@ -107,11 +107,13 @@ BLIP-2 artık varsayılan reranker (`configs/default.yaml`, λ=0.9). Canlı yold
 R@1 = 88.7 / 88.9 / 89.0; sorgu başına ~0.77 s (BLIP ile ~0.73 s, sessiz mod).
 Yayınlanmış sonuçlarla karşılaştırma (BLIP-2 zero-shot 89.7, BEiT-3 fine-tuned 90.3 vb.) raporda Tablo IV'te.
 
+İkinci benchmark: MS-COCO 5K (`scripts/pipelines/run_coco5k.sh`, SigLIP, 1000 sorgu, ağırlıklar Flickr'dan alındı). T→I R@1: sadece görsel 46.7, early fusion 50.7, hybrid 52.2, hybrid + BLIP-2 rerank **67.3**. Aşama sıralaması Flickr'daki gibi, ama 5 kat büyük ve kalabalık galeride düzey çok daha düşük; kazancın büyük kısmı yine reranker'dan geliyor. Ayrıntı: `results/SUMMARY.md` Part 6 ve rapor.
+
 Tekrar üretmek için: `bash scripts/pipelines/run_all.sh`, `bash scripts/pipelines/run_improvements.sh`, `bash scripts/pipelines/run_online.sh`,
-ardından `bash scripts/pipelines/run_blip2.sh`.
+`bash scripts/pipelines/run_blip2.sh`, ardından (isteğe bağlı) `bash scripts/pipelines/run_coco5k.sh`.
 
 ## Rapor
 
-`report/report.pdf` (IEEE konferans formatı, İngilizce, 6 sayfa). Kaynak: `report/report.tex`. Grafikler
+`report/report.pdf` (IEEE konferans formatı, İngilizce, 7 sayfa). Kaynak: `report/report.tex`. Grafikler
 `python scripts/make_figures.py` ile `report/figures/` altına üretilir. PDF'i yeniden derlemek için `report/`
 klasörünü Overleaf'e yükleyebilir ya da yerel bir LaTeX derleyicisi (TeX Live, MiKTeX, Tectonic) kullanabilirsin.

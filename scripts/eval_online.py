@@ -16,7 +16,7 @@ import numpy as np
 from tqdm import tqdm
 
 from mmrag.config import load_config, resolve
-from mmrag.data import load_flickr1k
+from mmrag.data import load_coco5k, load_flickr1k
 from mmrag.pipeline import load_retriever
 
 
@@ -28,6 +28,7 @@ def main():
     ap.add_argument("--sleep", type=float, default=None, help="override throttle.gpu_sleep_s")
     ap.add_argument("--reranker", default=None, help="override reranker.name (e.g. Salesforce/blip2-itm-vit-g-coco)")
     ap.add_argument("--weight", type=float, default=None, help="override reranker.weight (lambda)")
+    ap.add_argument("--dataset", choices=["flickr1k", "coco5k"], default="flickr1k")
     ap.add_argument("--suffix", default="", help="appended to the output file name, e.g. _blip2")
     args = ap.parse_args()
 
@@ -42,7 +43,7 @@ def main():
     store = retriever.store
     print(store)
 
-    items, queries, q2i = load_flickr1k()
+    items, queries, q2i = {"flickr1k": load_flickr1k, "coco5k": load_coco5k}[args.dataset]()
     row_of = {it["id"]: r for r, it in enumerate(store.items)}
     gt = [row_of[items[i]["id"]] for i in q2i]
     qidx = np.arange(len(queries))

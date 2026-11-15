@@ -42,7 +42,10 @@ image--text matching model. With a BLIP reranker the system reaches 84.9--85.9 R
 CLIP ViT-L/14 and SigLIP, up from 58.8--74.6, so that after reranking the choice of dual encoder hardly
 matters. A BLIP-2 reranker raises this to 88.3--88.6 R@1 for all three encoders, 1.1 points below the published
 zero-shot BLIP-2 result, without any training. All weights are selected by cross-validation, and an
-end-to-end evaluation of the live search code reproduces the offline numbers. The retrieved images are passed to a vision-language model that answers questions
+end-to-end evaluation of the live search code reproduces the offline numbers. On the larger and harder
+MS-COCO 5K benchmark, the same pipeline with SigLIP and weights fixed on Flickr30k raises T\RA I R@1 from
+46.7 (image only) to 52.2 (hybrid fusion) and to 67.3 with the BLIP-2 reranker; most of the gain again comes from the
+reranker, and we analyse why the cheaper stages fall short there. The retrieved images are passed to a vision-language model that answers questions
 with source citations.
 \end{abstract}
 
@@ -75,7 +78,8 @@ fusion, modality centering, multi-caption fusion and hybrid dual-encoder/text-em
 dual encoders and four caption sets, with all weights chosen by cross-validation.
 \item A two-stage retriever that adds cross-attention reranking and reaches 84.9--85.9 R@1 on Flickr30k 1K
 for all three encoders with BLIP and 88.3--88.6 with BLIP-2, an end-to-end evaluation of the live search
-code that matches the offline results, and a comparison with published results under their protocols.
+code that matches the offline results, a comparison with published results under their protocols, and a
+second-benchmark evaluation on MS-COCO 5K that shows where each stage helps and where it stops helping.
 \end{itemize}
 
 \section{Related Work}
@@ -218,7 +222,9 @@ instruction to answer only from the provided sources and to cite them as [S1], [
 \textbf{Data.} We use the standard Flickr30k~\cite{young2014flickr} 1K test split~\cite{karpathy2015deep}:
 1000 images with 5 human captions each, giving 5000 text queries for text\RA image (T\RA I) retrieval
 and 1000 image queries for image\RA text (I\RA T) retrieval. The human captions are used only as queries
-and ground truth, never as image metadata.
+and ground truth, never as image metadata. As a second benchmark we use the MS-COCO~\cite{lin2014coco} 2014
+5K test split: 5000 images and 25{,}010 captions (a few images have more than five), used the same way. For
+COCO we evaluate 1000 randomly sampled text queries (fixed seed) through the live search path with SigLIP only.
 
 \textbf{Models.} Dual encoders: CLIP ViT-B/32, CLIP ViT-L/14 and SigLIP-base (patch 16, 224px). Caption
 sets: BLIP-base (blip-b), BLIP-large (blip-l), and Florence-2-large with the
@@ -468,6 +474,73 @@ SigLIP    & 73.8 & 76.8 & 80.4 & 85.4 & \best{89.0} \\
 \end{tabular}
 \end{table}
 
+\subsection{Second Benchmark: MS-COCO 5K}
+To test whether the findings depend on Flickr30k, we ran the live search path on the COCO 5K test split with
+SigLIP, with the same four caption sets, the same BGE channel and the same settings as in the Flickr30k live
+evaluation ($\alpha=0.85$, $w=0.3$, $\lambda=0.9$, BLIP-2 reranker, top-16). No weight was tuned on COCO. The
+captions were generated for all 5000 images with the same captioners. Table~\ref{tab:coco} lists every stage
+of the pipeline, not only the final one, next to the Flickr30k numbers obtained with the same code.
+
+\begin{table}[t]
+\centering
+\caption{T\RA I on COCO 5K (1000 sampled queries, SigLIP, live path) compared with Flickr30k 1K R@1 from the same
+code (Table~\ref{tab:online}). Each row adds one component to the row above.}
+\label{tab:coco}
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{l c ccc}
+\toprule
+& Flickr 1K & \multicolumn{3}{c}{COCO 5K} \\
+\cmidrule(lr){2-2}\cmidrule(lr){3-5}
+Stage & R@1 & R@1 & R@5 & R@10 \\
+\midrule
+Image only (SigLIP)         & 73.8 & 46.7 & 72.4 & 80.6 \\
++ multi-caption fusion      & 76.8 & 50.7 & 75.0 & 81.4 \\
++ BGE text channel (hybrid) & 80.4 & 52.2 & 76.2 & 83.8 \\
++ BLIP-2 rerank (top-16)    & 89.0 & \best{67.3} & \best{84.2} & \best{87.8} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The ordering of the stages is the same on both benchmarks (image only $<$ fused $<$ hybrid $<$ reranked), but
+the absolute level is much lower on COCO. We use the measurements to explain why each cheaper stage scores
+lower, and we mark statements that are interpretations rather than measurements.
+
+\emph{Image only (46.7 R@1).} A single 224-pixel global vector has to separate the target from a gallery that
+is five times larger and made of crowded everyday scenes in which many images share the same scene type.
+The right image is usually close: R@10 is 80.6 although R@1 is 46.7. A single vector cannot encode the details
+that distinguish such neighbours, such as counts, attributes and relations.
+
+\emph{Fusion and hybrid scoring (50.7 and 52.2 R@1).} The gains over image-only (+4.0 and +5.5) are of the
+same size as on Flickr30k (+3.0 and +6.6), so fusion transfers, but it does not close the gap. Fusion
+moves a document closer to a text query only through what its captions say, and a caption states the gist of
+a scene. Two kitchens or two street scenes receive near-identical captions, so a caption channel cannot rank
+them against each other (our interpretation; we did not run a caption-level error analysis). In addition, the
+weights come from Flickr30k and were not tuned for COCO, so these two rows are probably slightly pessimistic.
+
+\emph{Reranking (67.3 R@1).} Cross-attention gives the largest gain, +15.1 points over hybrid, larger than
+the +8.6 on Flickr30k, because the first stage leaves more room on COCO and the query tokens can attend to
+the patches that carry the distinguishing detail. The result is also bounded: since R@10 after reranking
+is 87.8, recall@16 of the first stage is at least 87.8\% (up to 12.2\% of queries cannot be fixed by the reranker).
+The bound is not the main limit here. On Flickr30k the reranker turns a recall@16 of about 98\% into 88--89 R@1,
+a gap of about 9 points; on COCO at least 20 points separate R@1 (67.3) from the 87.8\% lower bound, so the
+ordering inside the top-16 becomes the bottleneck. Many candidates in the top-16 are near-duplicates in
+content, and COCO also contains images that fit a query as well as the annotated one but are counted as wrong
+(a known property of the benchmark that puts a ceiling below 100 on any method).
+
+\emph{Why the cheaper stages are still used.} Each lower row is a component of the final system, not a
+competitor. They are cheap (about 0.43\,s per query in the throttled mode, against 1.0\,s with the reranker)
+and they supply the candidate set that the reranker rescores. Without them, the reranker would have to score
+the whole gallery. The numbers also show their limit: the stages that compare one vector with one vector or
+one caption with one query are not enough on a large, crowded gallery, and the pairwise cross-attention step
+does the work that decides the final ranking.
+
+\emph{Caveats.} The COCO evaluation uses one encoder (SigLIP), 1000 sampled queries (standard error about
+1.5 points) and no cross-validation, because weights were taken from Flickr30k. The BLIP reranker and the
+CLIP encoders were not run on COCO. The BLIP-2 reranker was fine-tuned on COCO images, so COCO is an
+in-domain test for it, whereas Flickr30k is a transfer test; the two reranked numbers are therefore not
+directly comparable in difficulty. We do not compare with published COCO results, because we did not
+verify them against the original papers for this version of the report.
+
 \subsection{Qualitative Example: Retrieval and Grounded Answering}
 Fig.~\ref{fig:qual} shows the four images retrieved for the query ``two dogs playing in the snow''; all four
 match the query. Given these images and the question ``What are the dogs in these photos doing, and what do
@@ -493,11 +566,13 @@ adds 16 passes of a text transformer over cached image features. BLIP-2 is heavi
 in the throttled mode, or about 0.13\,s per query (16 candidates) when the pauses are removed.
 
 \textbf{Scope of evaluation.} The quantitative study covers text\RA image and image\RA text retrieval on
-one benchmark of 1000 images. Image + text queries (query fusion with $\beta$) are supported and demonstrated,
+Flickr30k 1K; the larger COCO 5K benchmark is evaluated for text\RA image only, with one encoder and a sample
+of 1000 queries. Image + text queries (query fusion with $\beta$) are supported and demonstrated,
 but not measured, because Flickr30k has no composed queries; a benchmark such as CIRR would be needed. The
 online evaluation uses a 1000-query sample.
 
-\textbf{Possible data overlap.} Both rerankers were fine-tuned on COCO, not Flickr30k. We cannot rule out that
+\textbf{Possible data overlap.} Both rerankers were fine-tuned on COCO, not Flickr30k, so the COCO 5K evaluation is
+in-domain for them. We cannot rule out that
 the large pre-training corpora of the captioners and encoders contain Flickr images, which applies equally
 to all compared methods.
 
@@ -514,7 +589,9 @@ with text in a dedicated embedding space and combined with the image score, and 
 reranks a small, high-recall candidate set. Together these raise Flickr30k 1K text\RA image R@1 from
 58.8--74.6 to 84.9--85.9 across three dual encoders without any training, and to 88.3--88.6 with a BLIP-2
 reranker, close to task-specific vision-language models evaluated under the same protocol. The live system
-reproduces these numbers end to end.
+reproduces these numbers end to end. On MS-COCO 5K the same stages keep their order but the absolute numbers
+are lower (52.2 R@1 for hybrid fusion, 67.3 with BLIP-2), because the larger, more crowded gallery leaves many
+similar candidates that only the cross-attention reranker can separate.
 
 \begin{thebibliography}{00}
 \bibitem{lewis2020rag} P. Lewis \emph{et al.}, ``Retrieval-augmented generation for knowledge-intensive NLP

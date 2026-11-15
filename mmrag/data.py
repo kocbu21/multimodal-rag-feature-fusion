@@ -1,8 +1,9 @@
 """Datasets and corpus loading.
 
-Two sources:
+Sources:
 * `flickr1k` - Flickr30k 1K test split (1000 images x 5 captions), the standard
   image-text retrieval benchmark used for evaluation.
+* `coco5k`   - MS-COCO 2014 5K test split (5000 images x 5 captions), a second benchmark.
 * `raw`      - your own files: data/raw/images/* (an optional same-named .txt next to an
   image is used as its description) and data/raw/texts/*.txt|*.md (chunked by paragraph).
 """
@@ -19,10 +20,10 @@ from .config import resolve
 
 IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".bmp"}
 FLICKR_REPO = "nlphuji/flickr_1k_test_image_text_retrieval"
+COCO_REPO = "nlphuji/mscoco_2014_5k_test_image_text_retrieval"
 
 
-def prepare_flickr1k(out_dir: str | Path = "data/flickr1k") -> Path:
-    """Download the Flickr30k 1K test split and write `annotations.json`."""
+def _prepare_hf_benchmark(repo: str, csv_name: str, zip_name: str, out_dir: str | Path) -> Path:
     from huggingface_hub import hf_hub_download
 
     out = resolve(out_dir)
@@ -30,8 +31,8 @@ def prepare_flickr1k(out_dir: str | Path = "data/flickr1k") -> Path:
     if ann_path.exists():
         return out
     out.mkdir(parents=True, exist_ok=True)
-    csv_path = hf_hub_download(FLICKR_REPO, "test_1k_flickr.csv", repo_type="dataset")
-    zip_path = hf_hub_download(FLICKR_REPO, "images_flickr_1k_test.zip", repo_type="dataset")
+    csv_path = hf_hub_download(repo, csv_name, repo_type="dataset")
+    zip_path = hf_hub_download(repo, zip_name, repo_type="dataset")
 
     img_dir = out / "images"
     img_dir.mkdir(exist_ok=True)
@@ -51,19 +52,37 @@ def prepare_flickr1k(out_dir: str | Path = "data/flickr1k") -> Path:
     return out
 
 
-def load_flickr1k(root: str | Path = "data/flickr1k") -> tuple[list[dict], list[str], list[int]]:
-    """Returns (image items, query captions, image index of each caption)."""
-    root = prepare_flickr1k(root)
+def prepare_flickr1k(out_dir: str | Path = "data/flickr1k") -> Path:
+    """Download the Flickr30k 1K test split and write `annotations.json`."""
+    return _prepare_hf_benchmark(FLICKR_REPO, "test_1k_flickr.csv", "images_flickr_1k_test.zip", out_dir)
+
+
+def prepare_coco5k(out_dir: str | Path = "data/coco5k") -> Path:
+    """Download the MS-COCO 2014 5K test split and write `annotations.json`."""
+    return _prepare_hf_benchmark(COCO_REPO, "test_5k_mscoco_2014.csv", "images_mscoco_2014_5k_test.zip", out_dir)
+
+
+def _load_benchmark(root: Path, prefix: str, source: str) -> tuple[list[dict], list[str], list[int]]:
     records = json.loads((root / "annotations.json").read_text(encoding="utf-8"))
     items, queries, query_to_image = [], [], []
     for i, r in enumerate(records):
-        items.append({"id": f"flickr:{Path(r['filename']).stem}", "modality": "image",
+        items.append({"id": f"{prefix}:{Path(r['filename']).stem}", "modality": "image",
                       "path": str(root / "images" / r["filename"]), "text": None,
-                      "meta": {"source": "flickr30k-1k-test"}})
+                      "meta": {"source": source}})
         for c in r["captions"]:
             queries.append(c)
             query_to_image.append(i)
     return items, queries, query_to_image
+
+
+def load_flickr1k(root: str | Path = "data/flickr1k") -> tuple[list[dict], list[str], list[int]]:
+    """Returns (image items, query captions, image index of each caption)."""
+    return _load_benchmark(prepare_flickr1k(root), "flickr", "flickr30k-1k-test")
+
+
+def load_coco5k(root: str | Path = "data/coco5k") -> tuple[list[dict], list[str], list[int]]:
+    """Returns (image items, query captions, image index of each caption)."""
+    return _load_benchmark(prepare_coco5k(root), "coco", "mscoco-2014-5k-test")
 
 
 def _chunk(text: str, max_chars: int = 800) -> list[str]:

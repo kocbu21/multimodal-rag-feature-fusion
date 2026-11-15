@@ -188,3 +188,23 @@ Text -> Image (online, hybrid + rerank):
 - BLIP-2 adds +2.9 to +4.1 R@1 over BLIP in the live system for only ~35-40 ms more per query, because
   quiet-mode sleep dominates the latency. Cost: ~4.7 GB weights, 2.8 GB VRAM.
 - Per-file results: `results/tables/flickr1k_multi_*_online_blip2.md`.
+
+# Part 6: MS-COCO 5K (second benchmark)
+
+Live path (`scripts/eval_online.py --dataset coco5k`), SigLIP base, multi-caption store built from the same four
+caption sets, 1000 text queries (seed 0) out of 25,010, hybrid + BLIP-2 rerank (top-16, lambda=0.9), alpha=0.85,
+text_weight=0.3, quiet mode `gpu_sleep_s=0.2`. All weights were taken from the Flickr30k runs; nothing was tuned on COCO.
+Pipeline: `bash scripts/pipelines/run_coco5k.sh`.
+
+| strategy | R@1 | R@5 | R@10 | MRR@10 | ms/query |
+|---|---:|---:|---:|---:|---:|
+| image | 46.70 | 72.40 | 80.60 | 57.43 | 449 |
+| fused | 50.70 | 75.00 | 81.40 | 61.22 | 432 |
+| hybrid | 52.20 | 76.20 | 83.80 | 62.74 | 434 |
+| hybrid + BLIP-2 rerank | **67.30** | 84.20 | 87.80 | 74.52 | 1006 |
+
+- Same stage ordering as Flickr30k (image < fused < hybrid < rerank), but a much lower level (SigLIP Flickr live: 73.8 / 76.8 / 80.4 / 89.0).
+- Fusion gains over image-only: +4.0 (fused), +5.5 (hybrid); the reranker adds +15.1 over hybrid.
+- Reranked R@10 = 87.8 implies first-stage recall@16 >= 87.8%. R@1 stays at least 20 points below that bound, so ordering inside the top-16 is the bottleneck.
+- Caveats: one encoder, n=1000 (SE ~1.5 points), BLIP rerank and CLIP encoders not run on COCO; BLIP-2 ITM was fine-tuned on COCO, so this is in-domain for it.
+- Per-file results: `results/tables/coco5k_multi_siglip-base-patch16-224_online_blip2.md`.

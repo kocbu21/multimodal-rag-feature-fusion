@@ -15,7 +15,7 @@ from caption_images import save_cache
 
 from mmrag.captioner import build_captioner
 from mmrag.config import load_config, resolve
-from mmrag.data import load_flickr1k, load_raw_corpus
+from mmrag.data import load_coco5k, load_flickr1k, load_raw_corpus
 from mmrag.encoders import build_encoder
 from mmrag.indexing import build_store
 
@@ -26,13 +26,14 @@ def default_store_dir(source: str, encoder: str) -> str:
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--source", choices=["raw", "flickr1k"], default="raw")
+    ap.add_argument("--source", choices=["raw", "flickr1k", "coco5k"], default="raw")
     ap.add_argument("--config", default=None)
     ap.add_argument("--encoder", default=None, help="override encoder.name")
     ap.add_argument("--out", default=None, help="output directory (default: indexes/<source>_<encoder>)")
     ap.add_argument("--no-caption", action="store_true")
     ap.add_argument("--captioner", default=None, help="override captioner.name (e.g. a VLM)")
     ap.add_argument("--single-caption", action="store_true", help="ignore captioner.extra (one caption set)")
+    ap.add_argument("--caption-batch-size", type=int, default=None, help="override captioner.batch_size")
     ap.add_argument("--text-embedder", action="store_true", help="also store BGE vectors (hybrid strategy)")
     args = ap.parse_args()
 
@@ -43,13 +44,16 @@ def main():
         overrides["captioner"] = {"enabled": False}
     if args.captioner:
         overrides.setdefault("captioner", {})["name"] = args.captioner
+    if args.caption_batch_size:
+        overrides.setdefault("captioner", {})["batch_size"] = args.caption_batch_size
     if args.single_caption:
         overrides.setdefault("captioner", {})["extra"] = []
     if args.text_embedder:
         overrides["text_embedder"] = {"enabled": True}
     cfg = load_config(args.config, overrides)
 
-    items = load_flickr1k()[0] if args.source == "flickr1k" else load_raw_corpus()
+    loaders = {"flickr1k": lambda: load_flickr1k()[0], "coco5k": lambda: load_coco5k()[0], "raw": load_raw_corpus}
+    items = loaders[args.source]()
     if not items:
         raise SystemExit("No items found. Put images in data/raw/images and texts in data/raw/texts.")
     print(f"{len(items)} items ({sum(i['modality'] == 'image' for i in items)} images)")

@@ -11,7 +11,7 @@ import _bootstrap
 
 from mmrag.captioner import build_captioner
 from mmrag.config import load_config, resolve
-from mmrag.data import load_flickr1k, load_raw_corpus
+from mmrag.data import load_coco5k, load_flickr1k, load_raw_corpus
 
 CACHE = "data/caption_cache.json"
 
@@ -38,7 +38,7 @@ def captions_for(items: list[dict], captioner_name: str) -> list[str | None]:
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--captioner", required=True)
-    ap.add_argument("--source", choices=["flickr1k", "raw"], default="flickr1k")
+    ap.add_argument("--source", choices=["flickr1k", "coco5k", "raw"], default="flickr1k")
     ap.add_argument("--device", default=None)
     ap.add_argument("--chunk", type=int, default=40, help="save the cache every N images (resumable)")
     args = ap.parse_args()
@@ -47,7 +47,8 @@ def main():
     if args.device:
         over["captioner"]["device"] = args.device
     cfg = load_config(overrides=over)
-    items = load_flickr1k()[0] if args.source == "flickr1k" else load_raw_corpus()
+    loaders = {"flickr1k": lambda: load_flickr1k()[0], "coco5k": lambda: load_coco5k()[0], "raw": load_raw_corpus}
+    items = loaders[args.source]()
     paths = [it["path"] for it in items if it["modality"] == "image"]
 
     cache = load_cache()
