@@ -101,3 +101,63 @@ def fuse_ranked_lists(lists: Mapping[str, list[tuple[int, float]]], method: str 
         else:
             raise ValueError(f"Unknown late fusion method: {method}")
     return sorted(agg.items(), key=lambda kv: kv[1], reverse=True)
+
+
+def early_fused_scores(A: np.ndarray, B: np.ndarray, cos_ic: np.ndarray, alpha: float) -> np.ndarray:
+    """<q, norm(alpha*v_I + (1-alpha)*v_C)> computed from A = Q @ I.T, B = Q @ C.T and cos_ic[g] = <v_I,g, v_C,g>,
+    without materialising the fused vectors (cheap to sweep alpha on large galleries)."""
+    norm = np.sqrt(np.clip(alpha ** 2 + (1 - alpha) ** 2 + 2 * alpha * (1 - alpha) * cos_ic, 1e-12, None))
+    return ((alpha * A + (1 - alpha) * B) / norm[None, :]).astype(np.float32)
+
+
+def max_pool_by_owner(scores: np.ndarray, owner: np.ndarray, n_items: int, fill: float = -1.0) -> np.ndarray:
+    """(n_q, n_vectors) scores of multi-vector items -> (n_q, n_items) max over each item's vectors."""
+    out = np.full((scores.shape[0], n_items), fill, dtype=np.float32)
+    order = np.argsort(owner, kind="stable")
+    owner_sorted = owner[order]
+    starts = np.flatnonzero(np.r_[True, owner_sorted[1:] != owner_sorted[:-1]])
+    out[:, owner_sorted[starts]] = np.maximum.reduceat(scores[:, order], starts, axis=1)
+    return out
+
+
+def bank_log_normaliser(bank_scores: np.ndarray, bank_owner: np.ndarray, beta: float) -> np.ndarray:
+    """Caption-bank hubness normaliser (inverted softmax, QB-Norm style, but with a *generated* query bank).
+
+    bank_scores[b, g] is the similarity of bank query b (a generated caption of image bank_owner[b]) to gallery
+    item g. For every gallery item g it returns L_g = log mean_{b: owner(b) != g} exp(beta * s(b, g)), i.e. how
+    strongly g attracts descriptions of *other* images. Hub images get a large L_g. No test query is used.
+    """
+    z = beta * bank_scores.astype(np.float64)
+    n_items = bank_scores.shape[1]
+    own = bank_owner[:, None] == np.arange(n_items)[None, :]
+    z = np.where(own, -np.inf, z)
+    m = z.max(axis=0)
+    lse = m + np.log(np.exp(z - m[None, :]).sum(axis=0))
+    count = (~own).sum(axis=0)
+    return (lse - np.log(np.clip(count, 1, None))).astype(np.float32)
+
+
+def apply_hubness(scores: np.ndarray, log_norm: np.ndarray, beta: float, rho: float) -> np.ndarray:
+    """s'(q, g) = s(q, g) - rho * L_g / beta. rho=1 is the exact inverted softmax, rho=0 switches it off."""
+    if rho == 0:
+        return scores
+    return scores - (rho / beta) * (log_norm - log_norm.mean())[None, :]
+
+
+def dual_softmax(scores: np.ndarray, temp: float = 0.01) -> np.ndarray:
+    """Dual softmax over the *test queries* (transductive: uses all test queries at once). Reported only as a
+    clearly labelled ablation, never in the main comparison."""
+    z = scores / temp
+    z = z - z.max(axis=0, keepdims=True)
+    prior = np.exp(z)
+    prior /= prior.sum(axis=0, keepdims=True)
+    return scores * prior
+
+
+def collapse_max(hits: list[tuple[int, float]]) -> list[tuple[int, float]]:
+    """Keep the best score per item row in a ranked list that may contain several vectors of one item."""
+    best: dict[int, float] = {}
+    for row, s in hits:
+        if row not in best or s > best[row]:
+            best[row] = s
+    return sorted(best.items(), key=lambda kv: kv[1], reverse=True)

@@ -31,3 +31,6 @@ report/*.synctex.gz
 *.pem
 secrets*
 data/coco5k/
+
+data/region_cache.json
+data/region_cache.json.tmp

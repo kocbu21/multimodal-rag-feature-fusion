@@ -4,6 +4,8 @@ Examples
 --------
 python scripts/build_index.py --source raw
 python scripts/build_index.py --source flickr1k --encoder google/siglip-base-patch16-224
+python scripts/build_index.py --source flickr1k --text-embedder --v2            # + regions, tags, BLIP-2 ITC, bank
+python scripts/build_index.py --upgrade indexes/flickr1k_multi_siglip-base-patch16-224   # add v2 vectors in place
 """
 
 import argparse
@@ -17,7 +19,7 @@ from mmrag.captioner import build_captioner
 from mmrag.config import load_config, resolve
 from mmrag.data import load_coco5k, load_flickr1k, load_raw_corpus
 from mmrag.encoders import build_encoder
-from mmrag.indexing import build_store
+from mmrag.indexing import add_v2_vectors, build_store
 
 
 def default_store_dir(source: str, encoder: str) -> str:
@@ -35,7 +37,13 @@ def main():
     ap.add_argument("--single-caption", action="store_true", help="ignore captioner.extra (one caption set)")
     ap.add_argument("--caption-batch-size", type=int, default=None, help="override captioner.batch_size")
     ap.add_argument("--text-embedder", action="store_true", help="also store BGE vectors (hybrid strategy)")
+    ap.add_argument("--v2", action="store_true",
+                    help="also store region crops, object tags, BLIP-2 ITC vectors and the caption bank ('full' strategy)")
+    ap.add_argument("--regions", default="grid,od", help="region kinds for --v2 ('' = none)")
+    ap.add_argument("--upgrade", default=None, help="add the --v2 vectors to an existing store directory in place")
     args = ap.parse_args()
+    if args.upgrade:
+        args.v2 = True
 
     overrides = {}
     if args.encoder:
@@ -51,6 +59,9 @@ def main():
     if args.text_embedder:
         overrides["text_embedder"] = {"enabled": True}
     cfg = load_config(args.config, overrides)
+
+    if args.upgrade:
+        return upgrade(args, cfg)
 
     loaders = {"flickr1k": lambda: load_flickr1k()[0], "coco5k": lambda: load_coco5k()[0], "raw": load_raw_corpus}
     items = loaders[args.source]()
@@ -85,10 +96,42 @@ def main():
         text_embedder = TextEmbedder(cfg["text_embedder"]["name"], cfg["encoder"].get("device", "cuda"),
                                      sleep_s=cfg["throttle"]["gpu_sleep_s"])
     store = build_store(items, encoder, text_embedder=text_embedder)
+    if args.v2:
+        add_v2(store, encoder, text_embedder, args, cfg)
     out = resolve(args.out or default_store_dir(args.source, cfg["encoder"]["name"]))
     store.save(out)
     print(store)
     print(f"saved to {out}")
+
+
+def add_v2(store, encoder, text_embedder, args, cfg) -> None:
+    from mmrag.regions import ensure_od_cache
+
+    device = cfg["encoder"].get("device", "cuda")
+    sleep_s = cfg["throttle"]["gpu_sleep_s"]
+    kinds = [k for k in args.regions.split(",") if k]
+    paths = [it["path"] for it in store.items if it["modality"] == "image"]
+    od_cache = ensure_od_cache(paths, device=device, sleep_s=sleep_s)
+    if text_embedder is None and store.text_embedder_name:
+        from mmrag.text_embedder import TextEmbedder
+        text_embedder = TextEmbedder(store.text_embedder_name, device, sleep_s=sleep_s)
+    itc = None
+    if "blip2" in cfg["reranker"]["name"].lower():
+        from mmrag.reranker import ITMReranker
+        itc = ITMReranker(cfg["reranker"]["name"], device, sleep_s=sleep_s)
+    add_v2_vectors(store, encoder, kinds, tags=True, text_embedder=text_embedder, itc_model=itc, od_cache=od_cache)
+
+
+def upgrade(args, cfg) -> None:
+    from mmrag.vector_store import UnifiedVectorStore
+
+    d = resolve(args.upgrade)
+    store = UnifiedVectorStore.load(d)
+    cfg["encoder"]["name"] = store.encoder_name
+    add_v2(store, build_encoder(cfg), None, args, cfg)
+    store.save(d)
+    print(store)
+    print(f"upgraded {d}")
 
 
 if __name__ == "__main__":

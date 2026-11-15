@@ -112,6 +112,35 @@ Yayınlanmış sonuçlarla karşılaştırma (BLIP-2 zero-shot 89.7, BEiT-3 fine
 Tekrar üretmek için: `bash scripts/pipelines/run_all.sh`, `bash scripts/pipelines/run_improvements.sh`, `bash scripts/pipelines/run_online.sh`,
 `bash scripts/pipelines/run_blip2.sh`, ardından (isteğe bağlı) `bash scripts/pipelines/run_coco5k.sh`.
 
+## v2: geliştirmeler (GPU koşusu bekleniyor)
+
+v1 analizinin bulduğu iki darboğaza (ilk aşamanın kaçırdığı adaylar ve top-16 içindeki birbirine çok benzeyen
+sahneler) yönelik, eğitim gerektirmeyen bileşenler. Hepsi çapraz doğrulamayla seçiliyor; CV bir bileşeni
+yararsız bulursa ağırlığı 0 olur.
+
+| Bileşen | Kod | Ne yapar |
+|---|---|---|
+| Bölge özellikleri | `mmrag/regions.py` | 5 ızgara kırpımı + Florence-2 `<OD>` nesne kutuları; görsel en iyi eşleşen bölgesiyle puanlanır (max pooling) |
+| Nesne etiketleri | `mmrag/regions.py` | Tespit edilen etiketler ("dog, frisbee") BGE uzayında ayrı bir kanal |
+| BLIP-2 ITC kanalı | `mmrag/reranker.py` | Reranker checkpoint'inin kontrastif başı (32 Q-Former vektörü) ilk aşamada ek kanal |
+| CB-Norm | `mmrag/fusion.py` | Caption-bank hubness normalizasyonu: galerinin kendi üretilmiş caption'ları sorgu bankası; eğitim verisi ya da test sorgusu kullanmaz |
+| Encoder ensemble | `scripts/experiments_v2.py` | CLIP B/32 + CLIP L/14 + SigLIP ilk aşama skorlarının eşit ağırlıklı ortalaması |
+| ITM+ITC rerank | `mmrag/retriever.py` | Aday havuzu K ∈ {16, 32, 64} ve ağırlıklar CV ile seçilir |
+
+Yeniden üretilen referanslar (aynı kodda): BLIP-2'nin kendi protokolü (ITC top-128 → ITM logit + ITC) ve v1 sistemi.
+Anlamlılık için eşleştirilmiş bootstrap güven aralığı (2000 örnekleme) kullanılıyor.
+
+```bash
+python tests/test_v2.py                     # GPU gerektirmeyen birim testleri
+bash scripts/pipelines/run_v2.sh            # Flickr30k (offline CV + canlı yol) ve COCO 5K, kaldığı yerden devam eder
+```
+
+Çıktılar: `results/tables/{flickr1k,coco5k}_v2.md`, `results/json/*_v2.json` (CV seçimleri dahil),
+`configs/v2_<veri>_<encoder>.yaml` (canlı yol ayarları), `report/figures/v2_stages_*.pdf`.
+Canlı arama: `python app.py --store indexes/flickr1k_multi_siglip-base-patch16-224 --rerank` ve "full" stratejisi
+(store'a önce `python scripts/build_index.py --upgrade <store>` ile v2 vektörleri eklenmeli). GPU koşusu için
+adım adım talimatlar: `docs/GPU_RUNBOOK.md`.
+
 ## Rapor
 
 `report/report.pdf` (IEEE konferans formatı, İngilizce, 7 sayfa). Kaynak: `report/report.tex`. Grafikler

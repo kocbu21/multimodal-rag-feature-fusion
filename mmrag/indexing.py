@@ -60,3 +60,48 @@ def build_store(items: list[dict], encoder: DualEncoder, captioner: Captioner | 
     store = UnifiedVectorStore(items, vectors, rows, encoder_name=encoder.name)
     store.text_embedder_name = text_embedder.name if text_embedder is not None else None
     return store
+
+
+BANK_CAPTIONERS = ["Salesforce/blip-image-captioning-base", "Salesforce/blip-image-captioning-large"]
+
+
+def add_v2_vectors(store: UnifiedVectorStore, encoder: DualEncoder, region_kinds=("grid", "od"), tags: bool = True,
+                   text_embedder=None, itc_model=None, bank: bool = True, od_cache: dict | None = None) -> None:
+    """Add the v2 vector types to an existing store (see vector_store.py): region crops, object tags,
+    BLIP-2 ITC query vectors and the generated-caption bank used for hubness normalisation."""
+    from .regions import encode_regions, object_tags
+
+    items = store.items
+    img_rows = np.array([i for i, it in enumerate(items) if it["modality"] == "image"], dtype=np.int64)
+    paths = [items[i]["path"] for i in img_rows]
+    if not len(img_rows):
+        return
+    if region_kinds:
+        v, owner, _ = encode_regions(encoder, paths, list(region_kinds), od_cache)
+        store.raw["region"], store.rows["region"] = v, img_rows[owner]
+    if tags and text_embedder is not None and od_cache is not None:
+        t = [object_tags(p, od_cache) or "an image" for p in paths]
+        store.raw["te_tags"], store.rows["te_tags"] = text_embedder.encode(t, show_progress=True), img_rows
+    if itc_model is not None:
+        z = itc_model.itc_image_embeds(paths, show_progress=True)
+        store.raw["itc"] = z.reshape(-1, z.shape[-1]).astype(np.float32)
+        store.rows["itc"] = np.repeat(img_rows, z.shape[1])
+    if bank:
+        texts, owners = [], []
+        for name in BANK_CAPTIONERS:
+            for r in img_rows:
+                c = (items[r].get("captions") or {}).get(name)
+                if c:
+                    texts.append(c)
+                    owners.append(r)
+        if not texts:
+            texts = [items[r]["caption"] for r in img_rows if items[r].get("caption")]
+            owners = [r for r in img_rows if items[r].get("caption")]
+        if texts:
+            owners = np.asarray(owners, dtype=np.int64)
+            store.raw["bank_dual"], store.rows["bank_dual"] = encoder.encode_texts(texts, show_progress=True), owners
+            if text_embedder is not None:
+                store.raw["bank_te"], store.rows["bank_te"] = text_embedder.encode(texts, show_progress=True), owners
+            if itc_model is not None:
+                store.raw["bank_itc"], store.rows["bank_itc"] = itc_model.itc_text_embeds(texts, show_progress=True), owners
+    store.rebuild()

@@ -26,6 +26,7 @@ reranker:
   name: Salesforce/blip2-itm-vit-g-coco
   top_k: 16
   weight: 0.9
+  itc_weight: 0.0
 
 store:
   dir: indexes/default
@@ -37,6 +38,9 @@ fusion:
   rrf_k: 60
   center_modalities: false
   text_weight: 0.3
+  full_weights: {fused: 0.55, te_caption: 0.25, te_tags: 0.05, region: 0.10, itc: 0.05}
+  hub_beta: 20.0
+  hub_rho: 0.0
 
 search:
   top_k: 10

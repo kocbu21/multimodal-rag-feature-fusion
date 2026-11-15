@@ -90,8 +90,51 @@ def fig_qualitative():
     fig.savefig(OUT / "qualitative.pdf", dpi=200)
 
 
+V2_SHORT = [("CLIP-B/32", "CLIP ViT-B/32"), ("CLIP-L/14", "CLIP ViT-L/14"), ("SigLIP-B", "SigLIP B/16")]
+
+
+def fig_v2(dataset="flickr1k"):
+    """T->I R@1 along the v2 chain, per encoder, with the reproduced and published BLIP-2 levels."""
+    path = ROOT / f"results/json/{dataset}_v2.json"
+    if not path.exists():
+        print(f"skip v2 figure: {path.name} not found")
+        return
+    m = json.loads(path.read_text(encoding="utf-8"))["metrics"]
+    steps = [("image", "Image\nonly"), ("hybrid (v1)", "Hybrid\n(v1)"), ("+tags", "+obj.\ntags"),
+             ("+regions", "+regions"), ("+itc", "+BLIP-2\nITC"), ("+hub (CB-Norm)", "+CB-\nNorm"),
+             ("final -> rerank ITM+ITC", "+ITM/ITC\nrerank")]
+    fig, ax = plt.subplots(figsize=(3.45, 2.45))
+    x = list(range(len(steps)))
+    for (short, label), c, mk in zip(V2_SHORT, COLORS, MARKERS):
+        xs, ys = [], []
+        for i, (key, _) in enumerate(steps):
+            k = f"{short} {key}"
+            if k in m and m[k]["R@1"] == m[k]["R@1"]:
+                xs.append(i)
+                ys.append(m[k]["R@1"])
+        if ys:
+            ax.plot(xs, ys, color=c, lw=2, marker=mk, ms=5, mec="white", mew=1, label=label, zorder=3)
+    ens = [k for k in m if k.startswith("ensemble final -> rerank ITM+ITC")]
+    if ens:
+        ax.scatter([len(steps) - 1], [m[ens[0]]["R@1"]], marker="*", s=90, color=INK, zorder=4,
+                   label=f"Ensemble ({m[ens[0]]['R@1']:.1f})")
+    nat = [k for k in m if k.startswith("BLIP-2 protocol")]
+    refs = [(89.7, "BLIP-2 ZS (paper)", ":")] + ([(m[nat[0]]["R@1"], "BLIP-2 ZS (reproduced)", "--")] if nat else [])
+    for v, lab, ls in refs:
+        ax.axhline(v, color=INK2, lw=0.8, ls=ls, zorder=1)
+        ax.annotate(f"{lab} {v:.1f}", (0, v), xytext=(0, 2), textcoords="offset points", fontsize=5.5, color=INK2)
+    ax.set_xticks(x, [s[1] for s in steps], fontsize=5.5)
+    ax.set_ylabel("Text→Image R@1 (%)")
+    ax.grid(axis="y", color=GRID, lw=0.6, zorder=0)
+    ax.legend(frameon=False, fontsize=6, loc="lower right")
+    fig.tight_layout(pad=0.3)
+    fig.savefig(OUT / f"v2_stages_{dataset}.pdf")
+
+
 if __name__ == "__main__":
-    fig_stages()
-    fig_alpha()
-    fig_qualitative()
+    for fn in (fig_stages, fig_alpha, fig_qualitative, fig_v2, lambda: fig_v2("coco5k")):
+        try:
+            fn()
+        except Exception as e:
+            print(f"figure {getattr(fn, '__name__', fn)} skipped: {e}")
     print("figures:", sorted(p.name for p in OUT.iterdir()))
