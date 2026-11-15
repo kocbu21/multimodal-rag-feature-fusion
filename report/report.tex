@@ -15,6 +15,9 @@
 
 \newcommand{\RA}{\ensuremath{\rightarrow}}
 \newcommand{\best}[1]{\textbf{#1}}
+% v2: every number that still has to come from the GPU run uses the red placeholder macro below.
+% Before submission no placeholder may remain (see docs/GPU_RUNBOOK.md, section 5).
+\newcommand{\TBD}[1]{\textcolor{red}{#1}}
 
 \begin{document}
 
@@ -45,12 +48,21 @@ zero-shot BLIP-2 result, without any training. All weights are selected by cross
 end-to-end evaluation of the live search code reproduces the offline numbers. On the larger and harder
 MS-COCO 5K benchmark, the same pipeline with SigLIP and weights fixed on Flickr30k raises T\RA I R@1 from
 46.7 (image only) to 52.2 (hybrid fusion) and to 67.3 with the BLIP-2 reranker; most of the gain again comes from the
-reranker, and we analyse why the cheaper stages fall short there. The retrieved images are passed to a vision-language model that answers questions
+reranker, and we analyse why the cheaper stages fall short there. Building on this analysis, a second version
+of the system (v2) attacks the two remaining bottlenecks, first-stage recall and near-duplicate candidates, with
+five training-free additions: region features from object detection and grid crops, detected object tags, the
+contrastive (ITC) head of the BLIP-2 checkpoint as an extra first-stage channel, \emph{caption-bank hubness
+normalisation} (CB-Norm), a new variant of querybank normalisation whose query bank consists of the gallery's own
+generated captions and therefore needs neither training data nor test queries, and an ensemble of the three dual
+encoders, followed by a joint ITM+ITC reranker over a cross-validated candidate pool. On Flickr30k 1K, v2 reaches
+\TBD{XX.X} T\RA I R@1 (\TBD{+X.X} over v1, 95\% CI \TBD{[X.X, X.X]}), compared with \TBD{XX.X} for BLIP-2's own
+retrieval protocol re-run in the same code and 89.7 reported in the BLIP-2 paper; on COCO 5K it reaches
+\TBD{XX.X}. The retrieved images are passed to a vision-language model that answers questions
 with source citations.
 \end{abstract}
 
 \begin{IEEEkeywords}
-cross-modal retrieval, multimodal RAG, feature fusion, CLIP, image captioning, reranking
+cross-modal retrieval, multimodal RAG, feature fusion, CLIP, image captioning, reranking, hubness, region features
 \end{IEEEkeywords}
 
 \section{Introduction}
@@ -80,6 +92,12 @@ dual encoders and four caption sets, with all weights chosen by cross-validation
 for all three encoders with BLIP and 88.3--88.6 with BLIP-2, an end-to-end evaluation of the live search
 code that matches the offline results, a comparison with published results under their protocols, and a
 second-benchmark evaluation on MS-COCO 5K that shows where each stage helps and where it stops helping.
+\item A second version (v2) with five training-free components aimed at the bottlenecks found in v1: region-level
+features from detected objects and grid crops, object tags, BLIP-2 ITC as a first-stage channel, multi-encoder
+ensembling, and \emph{caption-bank hubness normalisation} (CB-Norm), which corrects hub images with a bank of the
+gallery's own generated captions instead of training or test queries. Every component is selected or switched off
+by cross-validation, its contribution is measured in an ablation, and the final system is compared with v1 and with
+BLIP-2's retrieval protocol, re-run in the same code, using paired bootstrap confidence intervals.
 \end{itemize}
 
 \section{Related Work}
@@ -101,6 +119,18 @@ is a popular rank-level method in information retrieval.
 image--text matching (ITM) head on top of a text transformer that cross-attends to image patch features.
 These models are more accurate than dual encoders but must process every query--image pair, so they are used
 for reranking.
+
+\textbf{Region features and object tags.} Bottom-up attention~\cite{anderson2018bottomup} and
+SCAN~\cite{lee2018scan} match words with detected image regions, and OSCAR~\cite{li2020oscar} feeds detected object
+tags to the model as anchors between the two modalities. These methods learn the region--word alignment; our v2 uses
+regions and tags without any training, through max pooling and a text-embedding channel.
+
+\textbf{Hubness.} In high-dimensional nearest-neighbour search some items (hubs) are the nearest neighbour of
+many queries~\cite{radovanovic2010hubs}. The inverted softmax~\cite{smith2017invsoftmax} and querybank
+normalisation (QB-Norm)~\cite{bogolin2022qbnorm} rescale each gallery item by its similarity to a bank of
+queries, which QB-Norm takes from the training set. Dual softmax~\cite{cheng2021camoe} normalises over the test
+queries themselves and is therefore transductive. Our CB-Norm builds the bank from generated captions of the
+gallery, so it needs neither training queries nor test queries.
 
 \textbf{Multimodal RAG.} MuRAG~\cite{chen2022murag} retrieves images and text for open question
 answering. Our work focuses on the retrieval step and shows how much it can be improved without
@@ -213,6 +243,69 @@ query tokens. We cache the ViT-g features in the same way, and check that the ca
 probabilities as the reference implementation. The two ITM scores can also be combined,
 $a\, z(p_\mathrm{BLIP}) + b\, z(p_\mathrm{BLIP\text{-}2}) + (1-a-b)\, z(s_\mathrm{stage1})$.
 
+\subsection{Version 2: Beyond One Global Vector}
+\label{sec:v2}
+The v1 results (Section~\ref{sec:results}) leave two bottlenecks: candidates the first stage misses cannot be
+recovered by the reranker (recall@16 is 97.4--98.1 on Flickr30k and at least 87.8 on COCO), and the cheap
+channels cannot separate near-duplicate scenes, because a global vector and a caption both describe the gist of
+an image. v2 adds the following training-free components. All of them are cached at indexing time.
+
+\textbf{Region features.} For each image $g$ we form a region set $\mathcal{R}_g$: four overlapping quadrant
+crops (60\% of each side), a 70\% centre crop, and up to six object boxes from Florence-2~\cite{xiao2024florence}
+\texttt{<OD>} (largest first, area between 2\% and 90\% of the image, 10\% context margin, near-duplicates with
+IoU $>0.8$ removed). Every crop is encoded by the dual encoder's image tower, and an image is scored by its
+best-matching region,
+\begin{equation}
+s_\mathrm{reg}(q,g)=\max_{r\in\mathcal{R}_g}\langle E_T(q), E_I(x_r)\rangle .
+\label{eq:region}
+\end{equation}
+Max pooling acts as a hard, untrained attention: a query about a small object can match the crop that
+contains it, which a 224-pixel global view may blur.
+
+\textbf{Object tags.} The labels of the kept boxes form a short text (``dog, frisbee, grass''), embedded with
+BGE; $s_\mathrm{tag}(q,g)=\langle B(q), B(\mathrm{tags}_g)\rangle$. Tags name objects that a caption may omit.
+
+\textbf{BLIP-2 ITC channel.} The BLIP-2 reranker checkpoint also contains a contrastive head: the Q-Former turns
+an image into 32 query embeddings $z_{g,1..32}$ and a text into one embedding $t_q$, and
+$s_\mathrm{itc}(q,g)=\max_k \langle t_q, z_{g,k}\rangle$. The image side is precomputed, so this channel costs one
+text encoding per query, and its errors differ from those of CLIP/SigLIP, which should raise the recall of the
+candidate pool. We verified that our cached computation reproduces
+\texttt{Blip2ForImageTextRetrieval} exactly.
+
+\textbf{Greedy stage-1 combination.} Channels are added one at a time to the hybrid score of
+Eq.~(\ref{eq:hybrid}): $s^{(k)}=(1-\gamma_k)\,z(s^{(k-1)})+\gamma_k\, z(s_k)$, with
+$\gamma_k\in\{0,0.1,\dots,1\}$ chosen by cross-validation, so CV can switch a channel off ($\gamma_k=0$).
+
+\textbf{Caption-bank hubness normalisation (CB-Norm).} Hub images are close to many queries and take rank~1
+from the correct image. QB-Norm~\cite{bogolin2022qbnorm} detects them with a bank of training queries. We
+instead use the captions that BLIP-base and BLIP-large generated for the gallery images ($2N$ pseudo-queries
+$\mathcal{B}$, each owned by one image). For a channel $c$ and gallery item $g$,
+\begin{equation}
+\begin{aligned}
+L^c_g &= \log \frac{1}{|\mathcal{B}_{\neg g}|}\sum_{b\in\mathcal{B}_{\neg g}} \exp\big(\beta\, s^c(b,g)\big),\\
+\tilde{s}^c(q,g) &= s^c(q,g) - \tfrac{\rho}{\beta}\big(L^c_g-\bar{L}^c\big),
+\end{aligned}
+\label{eq:cbnorm}
+\end{equation}
+where $\mathcal{B}_{\neg g}$ excludes the captions of $g$ itself (otherwise an image with good captions would
+be penalised for them) and $\bar{L}^c$ is the mean over the gallery. With $\rho=1$ this is the inverted
+softmax~\cite{smith2017invsoftmax} over the bank; $\rho=0$ switches it off. $L^c_g$ is computed once per item,
+so the query-time cost is one subtraction per score. Unlike dual softmax~\cite{cheng2021camoe}, CB-Norm never
+looks at the test queries, and unlike QB-Norm it needs no training split. We apply it to every channel with a
+shared $(\beta,\rho)\in\{10,20,50\}\times\{0,0.25,0.5,0.75,1\}$ chosen by CV.
+
+\textbf{Encoder ensemble.} The final stage-1 scores of CLIP ViT-B/32, CLIP ViT-L/14 and SigLIP are
+z-normalised and averaged with equal weights (no tuning).
+
+\textbf{Stage 2 with ITM and ITC.} Over the top-$K$ candidates the final score is
+\begin{equation}
+s = \lambda_1 z(p_\mathrm{ITM}) + \lambda_2 z(s_\mathrm{itc}) + (1-\lambda_1-\lambda_2)\, z(s_1),
+\label{eq:rerank2}
+\end{equation}
+where $(K,\lambda_1,\lambda_2)$ with $K\in\{16,32,64\}$ and $\lambda_1+\lambda_2\le 1$ is chosen by CV, so a
+larger pool is used only if it helps on held-out queries. For reference we also re-run BLIP-2's own retrieval
+protocol~\cite{li2023blip2} in our code: ITC top-128, then ITM logit plus ITC similarity.
+
 \subsection{Answer Generation}
 The top results (images with their captions, and text documents) are sent to a vision-language model
 (Claude Opus~5.5\footnote{Model ID \texttt{claude-opus-5-5}, accessed through the Anthropic API.}) with an
@@ -238,13 +331,20 @@ or fine-tuned by us.
 \textbf{Weight selection.} The images are split into two random folds. Every weight ($\alpha$, $w$,
 $\lambda$) is chosen on one fold by RSUM and applied to queries of the other fold, so no query is
 evaluated with a weight tuned on it. The reported numbers are therefore fair estimates for unseen data,
-not oracle values.
+not oracle values. In v2 the components are added greedily: each new weight is chosen on the same folds with the
+earlier weights fixed, and every grid contains the value that switches the component off.
+
+\textbf{Significance.} For the v2 system we report the difference in R@1 to the v1 system and to the re-run
+BLIP-2 protocol with a 95\% paired bootstrap confidence interval over queries (2000
+resamples)~\cite{efron1993bootstrap}. The v2 system that is tested (the encoder ensemble with ITM+ITC reranking) is
+fixed in advance, not chosen as the best row on the test set.
 
 \textbf{Implementation.} PyTorch, HuggingFace Transformers and FAISS on a single RTX~5070 GPU, run in a
 throttled ``quiet'' mode (a short pause after every batch). Captions are generated once per image and
 cached, and are shared by all encoders.
 
 \section{Results}
+\label{sec:results}
 
 \subsection{Fusion with a Single Short Caption}
 Table~\ref{tab:part1} compares fusion methods with BLIP-base captions. Early fusion beats image-only
@@ -386,6 +486,95 @@ recall@16 (bound)    & \multicolumn{2}{c}{97.36} & \multicolumn{2}{c}{98.06} & \
 \end{tabular}
 \end{table}
 
+\subsection{Version 2: Components, Ablations and Final System}
+\label{sec:v2res}
+% TODO(GPU run): fill every \TBD{} from results/tables/flickr1k_v2.md (rows are named as in the table below), then
+% rewrite the prose of this subsection to match the numbers. Keep a sentence only if the numbers support it; if CV
+% switched a component off (picked weight 0 in both folds), say so plainly.
+Table~\ref{tab:v2chain} adds the v2 components one at a time to the v1 hybrid first stage of each encoder;
+Table~\ref{tab:v2abl} isolates them, and Table~\ref{tab:v2final} compares the complete system with v1 and with
+BLIP-2's retrieval protocol re-run in our code.
+
+\begin{table}[t]
+\centering
+\caption{v2 stage-1 chain, T\RA I R@1 on Flickr30k 1K (5000 queries, 2-fold CV over images). Each row adds one
+component to the row above; ``rec@64'' is the share of queries whose image is in the top-64.}
+\label{tab:v2chain}
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{lccc}
+\toprule
+Stage 1 & CLIP B/32 & CLIP L/14 & SigLIP \\
+\midrule
+Image only                     & 58.76 & 64.58 & 74.58 \\
+Hybrid, multi-caption (v1)     & 72.78 & 75.64 & 78.78 \\
++ object tags (BGE) & \TBD{--} & \TBD{--} & \TBD{--} \\
++ region features & \TBD{--} & \TBD{--} & \TBD{--} \\
++ BLIP-2 ITC channel & \TBD{--} & \TBD{--} & \TBD{--} \\
++ CB-Norm & \TBD{--} & \TBD{--} & \TBD{--} \\
+\midrule
+Ensemble of the three          & \multicolumn{3}{c}{\TBD{--}} \\
+rec@16 / rec@64 (ensemble)     & \multicolumn{3}{c}{\TBD{--} / \TBD{--}} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[t]
+\centering
+\caption{Ablations on Flickr30k 1K, T\RA I R@1. Each row adds a single component to the v1 hybrid score of the
+same encoder (not chained), or scores with one channel alone. $\ddagger$: transductive, uses all test queries at
+once; not comparable and not part of our system.}
+\label{tab:v2abl}
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{lccc}
+\toprule
+Variant & CLIP B/32 & CLIP L/14 & SigLIP \\
+\midrule
+Hybrid (v1)                         & 72.78 & 75.64 & 78.78 \\
++ grid crops only & \TBD{--} & \TBD{--} & \TBD{--} \\
++ detected-object crops only & \TBD{--} & \TBD{--} & \TBD{--} \\
++ BLIP-2 ITC only & \TBD{--} & \TBD{--} & \TBD{--} \\
+\midrule
+BGE object tags alone               & \multicolumn{3}{c}{\TBD{--}} \\
+BLIP-2 ITC alone (full gallery)     & \multicolumn{3}{c}{\TBD{--}} \\
+Ensemble + dual softmax$^\ddagger$  & \multicolumn{3}{c}{\TBD{--}} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[t]
+\centering
+\caption{Final systems on Flickr30k 1K (5000 queries). All rows run in our code with the BLIP-2 ITM ViT-g
+checkpoint. $\Delta$: R@1 gain of v2 with a 95\% paired bootstrap CI.}
+\label{tab:v2final}
+\setlength{\tabcolsep}{3pt}
+\begin{tabular}{l ccc c}
+\toprule
+System & R@1 & R@5 & R@10 & $\Delta$R@1 of v2 [CI] \\
+\midrule
+BLIP-2 protocol, re-run (ITC top-128)  & \TBD{--} & \TBD{--} & \TBD{--} & \TBD{+X.X [X.X, X.X]} \\
+v1: B/32 hybrid + BLIP-2 (top-16)      & \TBD{88.58} & \TBD{--} & \TBD{--} & \TBD{+X.X [X.X, X.X]} \\
+v2: ensemble + ITM+ITC (CV $K$)        & \best{\TBD{--}} & \TBD{--} & \TBD{--} & -- \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+% TODO(GPU run): one paragraph per question, numbers from the tables above:
+% (1) Which channels did CV keep, with which weights (results/json/flickr1k_v2.json, "picked")? Which helped most?
+% (2) Regions: grid vs. detected objects -- does object-level evidence help more than fixed crops?
+% (3) BLIP-2 ITC: how much does it raise recall@16/@64, i.e. the upper bound of stage 2?
+% (4) CB-Norm: does it help, which (beta, rho) did CV pick, and is the gain larger for the weaker encoders?
+% (5) Final: is v2 above v1 and above the re-run BLIP-2 protocol with a CI that excludes 0? Which K did CV pick?
+\TBD{Results discussion to be written from the GPU run.}
+
+% TODO(GPU run): uncomment once scripts/make_figures.py has written report/figures/v2_stages_flickr1k.pdf
+% \begin{figure}[t]
+% \centering
+% \includegraphics[width=\columnwidth]{figures/v2_stages_flickr1k.pdf}
+% \caption{T\RA I R@1 along the v2 chain on Flickr30k 1K. Dotted: BLIP-2 zero-shot as published; dashed: BLIP-2
+% protocol re-run in our code. Star: encoder ensemble with ITM+ITC reranking.}
+% \label{fig:v2stages}
+% \end{figure}
+
 \subsection{Comparison with Published Results}
 Table~\ref{tab:published} places our system next to published Flickr30k 1K results. The numbers are copied
 from the original papers. Protocols differ, so the table is a reference point and not a leaderboard. Three
@@ -408,6 +597,9 @@ Our R@5 and R@10 are lower than those of the reranked baselines because only 16 
 which caps both near recall@16 (97.4--98.1); a larger $k$ would raise them at higher cost. In short, the
 system does not set a new state of the art, but it shows that combining frozen, off-the-shelf models with
 fusion reaches the level of task-specific vision-language models without any training.
+% TODO(GPU run): update this paragraph with the v2 row. Claim "above BLIP-2 zero-shot (89.7)" or "state of the art
+% among zero-shot methods" ONLY if the v2 R@1 and the lower end of its CI against the re-run protocol support it,
+% and keep the protocol caveats (COCO-fine-tuned reranker; BEiT-3 is fine-tuned on Flickr30k).
 
 \begin{table}[t]
 \centering
@@ -437,6 +629,8 @@ B/32 hybrid + BLIP$^\dagger$              & ZS, COCO    & 84.9 & 96.1 & 97.2 \\
 B/32 hybrid + BLIP-2$^\dagger$            & ZS, COCO    & 88.6 & 96.6 & 97.2 \\
 L/14 hybrid + BLIP-2$^\dagger$            & ZS, COCO    & 88.4 & 97.4 & 98.0 \\
 SigLIP hybrid + BLIP-2$^\dagger$          & ZS, COCO    & 88.3 & 97.3 & 97.9 \\
+\multicolumn{5}{l}{\emph{Ours v2 (frozen models, no training; CV-selected pool)}} \\
+v2 ensemble + ITM/ITC$^\dagger$           & ZS, COCO    & \TBD{--} & \TBD{--} & \TBD{--} \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -541,6 +735,30 @@ in-domain test for it, whereas Flickr30k is a transfer test; the two reranked nu
 directly comparable in difficulty. We do not compare with published COCO results, because we did not
 verify them against the original papers for this version of the report.
 
+\textbf{v2 on COCO 5K.} We also ran the v2 pipeline offline on all \TBD{25{,}010} COCO queries with its own
+2-fold CV ($K\in\{16,32\}$), so these numbers, unlike Table~\ref{tab:coco}, use weights chosen on COCO.
+
+\begin{table}[t]
+\centering
+\caption{v2 on COCO 5K, T\RA I (all queries, 2-fold CV over images).}
+\label{tab:coco_v2}
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{l ccc}
+\toprule
+Stage & R@1 & R@5 & R@10 \\
+\midrule
+SigLIP hybrid (v1 first stage)       & \TBD{--} & \TBD{--} & \TBD{--} \\
+SigLIP v2 first stage                & \TBD{--} & \TBD{--} & \TBD{--} \\
+Ensemble v2 first stage              & \TBD{--} & \TBD{--} & \TBD{--} \\
+v1 rerank (SigLIP hybrid, top-16)    & \TBD{--} & \TBD{--} & \TBD{--} \\
+v2 ensemble + ITM/ITC (CV $K$)       & \best{\TBD{--}} & \TBD{--} & \TBD{--} \\
+\bottomrule
+\end{tabular}
+\end{table}
+% TODO(GPU run): fill from results/tables/coco5k_v2.md and discuss whether the v2 channels help more on COCO, where
+% v1's analysis found the ordering inside the top-16 to be the bottleneck. Published COCO 5K T->I R@1 for
+% reference (verify against the papers before citing): BLIP-2 ViT-g fine-tuned on COCO 68.3.
+
 \subsection{Qualitative Example: Retrieval and Grounded Answering}
 Fig.~\ref{fig:qual} shows the four images retrieved for the query ``two dogs playing in the snow''; all four
 match the query. Given these images and the question ``What are the dogs in these photos doing, and what do
@@ -565,6 +783,12 @@ adds 16 passes of a text transformer over cached image features. BLIP-2 is heavi
 2.8\,GB of GPU memory in half precision); rescoring all 80K query--candidate pairs took about 25 minutes
 in the throttled mode, or about 0.13\,s per query (16 candidates) when the pauses are removed.
 
+\textbf{Cost of v2.} Detection runs once per image at indexing time (Florence-2 \texttt{<OD>}), and the region crops
+add about \TBD{X} vectors per image to the index. At query time v2 adds one BLIP-2 ITC text encoding and a
+max-pooled search over the region vectors; CB-Norm adds one subtraction per score. The ensemble triples the
+dual-encoder cost of stage~1, and a CV-selected pool of $K$ candidates costs $K$ ITM passes.
+% TODO(GPU run): put the measured live latency here (results/tables/flickr1k_multi_*_online_v2.md).
+
 \textbf{Scope of evaluation.} The quantitative study covers text\RA image and image\RA text retrieval on
 Flickr30k 1K; the larger COCO 5K benchmark is evaluated for text\RA image only, with one encoder and a sample
 of 1000 queries. Image + text queries (query fusion with $\beta$) are supported and demonstrated,
@@ -575,6 +799,10 @@ online evaluation uses a 1000-query sample.
 in-domain for them. We cannot rule out that
 the large pre-training corpora of the captioners and encoders contain Flickr images, which applies equally
 to all compared methods.
+
+\textbf{Transductive methods.} Normalising over the whole set of test queries (dual softmax) can raise R@1 but
+uses information a real system does not have at query time. We report it only as a labelled ablation
+(Table~\ref{tab:v2abl}); CB-Norm, which is part of our system, uses generated captions of the gallery only.
 
 \textbf{No training.} All gains come from combining frozen models. Learning the fusion weights or a small
 fusion network on the Flickr30k training split, or fine-tuning the encoders, would likely improve the first
@@ -592,6 +820,9 @@ reranker, close to task-specific vision-language models evaluated under the same
 reproduces these numbers end to end. On MS-COCO 5K the same stages keep their order but the absolute numbers
 are lower (52.2 R@1 for hybrid fusion, 67.3 with BLIP-2), because the larger, more crowded gallery leaves many
 similar candidates that only the cross-attention reranker can separate.
+v2 adds region and object evidence, a BLIP-2 contrastive channel, caption-bank hubness normalisation and an
+encoder ensemble, all without training, and reaches \TBD{XX.X} R@1 on Flickr30k 1K and \TBD{XX.X} on COCO 5K.
+% TODO(GPU run): one sentence on which component mattered most, from Table~\ref{tab:v2chain} and Table~\ref{tab:v2abl}.
 
 \begin{thebibliography}{00}
 \bibitem{lewis2020rag} P. Lewis \emph{et al.}, ``Retrieval-augmented generation for knowledge-intensive NLP
@@ -632,6 +863,22 @@ pre-training with frozen image encoders and large language models,'' in \emph{Pr
 with noisy text supervision,'' in \emph{Proc. ICML}, 2021.
 \bibitem{wang2023beit3} W. Wang \emph{et al.}, ``Image as a foreign language: BEiT pretraining for vision and
 vision-language tasks,'' in \emph{Proc. CVPR}, 2023.
+\bibitem{anderson2018bottomup} P. Anderson \emph{et al.}, ``Bottom-up and top-down attention for image captioning
+and visual question answering,'' in \emph{Proc. CVPR}, 2018.
+\bibitem{lee2018scan} K.-H. Lee, X. Chen, G. Hua, H. Hu, and X. He, ``Stacked cross attention for image-text
+matching,'' in \emph{Proc. ECCV}, 2018.
+\bibitem{li2020oscar} X. Li \emph{et al.}, ``Oscar: Object-semantics aligned pre-training for vision-language
+tasks,'' in \emph{Proc. ECCV}, 2020.
+\bibitem{radovanovic2010hubs} M. Radovanovi\'c, A. Nanopoulos, and M. Ivanovi\'c, ``Hubs in space: Popular nearest
+neighbors in high-dimensional data,'' \emph{J. Mach. Learn. Res.}, vol. 11, pp. 2487--2531, 2010.
+\bibitem{smith2017invsoftmax} S. L. Smith, D. H. P. Turban, S. Hamblin, and N. Y. Hammerla, ``Offline bilingual word
+vectors, orthogonal transformations and the inverted softmax,'' in \emph{Proc. ICLR}, 2017.
+\bibitem{bogolin2022qbnorm} S.-V. Bogolin, I. Croitoru, H. Jin, Y. Liu, and S. Albanie, ``Cross modal retrieval with
+querybank normalisation,'' in \emph{Proc. CVPR}, 2022.
+\bibitem{cheng2021camoe} X. Cheng, H. Lin, X. Wu, F. Yang, and D. Shen, ``Improving video-text retrieval by
+multi-stream corpus alignment and dual softmax loss,'' arXiv:2109.04290, 2021.
+\bibitem{efron1993bootstrap} B. Efron and R. J. Tibshirani, \emph{An Introduction to the Bootstrap}. Chapman \&
+Hall, 1993.
 \end{thebibliography}
 
 \end{document}

@@ -26,6 +26,7 @@ reranker:
   name: Salesforce/blip2-itm-vit-g-coco
   top_k: 16
   weight: 0.9
+  itc_weight: 0.0        # v2: BLIP-2 ITC share in stage 2 (set from results/json/*_v2.json)
 
 store:
   dir: indexes/default
@@ -37,6 +38,12 @@ fusion:
   rrf_k: 60
   center_modalities: false
   text_weight: 0.3
+  # v2 ("full" strategy, stores built with build_index.py --v2). Placeholder values: replace them with the
+  # cross-validated picks printed by scripts/experiments_v2.py (results/json/<dataset>_v2.json,
+  # "live_flat_weights_suggestion") before reporting live numbers.
+  full_weights: {fused: 0.55, te_caption: 0.25, te_tags: 0.05, region: 0.10, itc: 0.05}
+  hub_beta: 20.0         # caption-bank hubness normalisation temperature
+  hub_rho: 0.0           # 0 = off, 1 = full inverted softmax
 
 search:
   top_k: 10

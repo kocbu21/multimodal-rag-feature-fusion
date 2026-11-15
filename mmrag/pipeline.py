@@ -10,7 +10,8 @@ from .vector_store import UnifiedVectorStore
 
 def load_retriever(store_dir: str, cfg: dict, rerank: bool | None = None) -> MultimodalRetriever:
     store = UnifiedVectorStore.load(resolve(store_dir), alpha=cfg["fusion"]["alpha"],
-                                    center=cfg["fusion"]["center_modalities"])
+                                    center=cfg["fusion"]["center_modalities"],
+                                    hub_beta=cfg["fusion"].get("hub_beta", 0.0) if cfg["fusion"].get("hub_rho", 0.0) else 0.0)
     cfg["encoder"]["name"] = store.encoder_name
     sleep_s = cfg.get("throttle", {}).get("gpu_sleep_s", 0.0)
     device = cfg["encoder"].get("device", "cuda")

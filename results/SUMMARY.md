@@ -208,3 +208,17 @@ Pipeline: `bash scripts/pipelines/run_coco5k.sh`.
 - Reranked R@10 = 87.8 implies first-stage recall@16 >= 87.8%. R@1 stays at least 20 points below that bound, so ordering inside the top-16 is the bottleneck.
 - Caveats: one encoder, n=1000 (SE ~1.5 points), BLIP rerank and CLIP encoders not run on COCO; BLIP-2 ITM was fine-tuned on COCO, so this is in-domain for it.
 - Per-file results: `results/tables/coco5k_multi_siglip-base-patch16-224_online_blip2.md`.
+
+# Part 7: v2 (pending GPU run)
+
+New training-free components: region features (grid crops + Florence-2 `<OD>` boxes, max pooling), object tags
+(BGE), BLIP-2 ITC as a first-stage channel, caption-bank hubness normalisation (CB-Norm), an equal-weight ensemble of
+the three dual encoders, and an ITM+ITC reranker over a CV-selected pool (K in {16, 32, 64}). Same 2-fold CV over
+images as before; components are added greedily and every grid contains "off". Reproduced references in the same
+code: BLIP-2's retrieval protocol (ITC top-128 -> ITM logit + ITC) and the v1 system; paired bootstrap CIs.
+
+Pipeline: `bash scripts/pipelines/run_v2.sh` (see `docs/GPU_RUNBOOK.md`). Results will be in
+`results/tables/flickr1k_v2.md`, `results/tables/coco5k_v2.md` and `results/tables/flickr1k_multi_*_online_v2.md`.
+Code checks done without a GPU: `tests/test_v2.py` (fusion maths, fast ranking, rerank ranks vs. brute force, CV
+isolation), cached BLIP-2 ITM/ITC paths equal `Blip2ForImageTextRetrieval.forward` on a random tiny model, and an
+end-to-end smoke run of build -> upgrade -> experiments_v2 -> live eval on a synthetic 24-image set.
