@@ -112,11 +112,23 @@ Yayınlanmış sonuçlarla karşılaştırma (BLIP-2 zero-shot 89.7, BEiT-3 fine
 Tekrar üretmek için: `bash scripts/pipelines/run_all.sh`, `bash scripts/pipelines/run_improvements.sh`, `bash scripts/pipelines/run_online.sh`,
 `bash scripts/pipelines/run_blip2.sh`, ardından (isteğe bağlı) `bash scripts/pipelines/run_coco5k.sh`.
 
-## v2: geliştirmeler (GPU koşusu bekleniyor)
+## v2: geliştirmeler ve sonuçlar
 
 v1 analizinin bulduğu iki darboğaza (ilk aşamanın kaçırdığı adaylar ve top-16 içindeki birbirine çok benzeyen
 sahneler) yönelik, eğitim gerektirmeyen bileşenler. Hepsi çapraz doğrulamayla seçiliyor; CV bir bileşeni
-yararsız bulursa ağırlığı 0 olur.
+yararsız bulursa ağırlığı 0 olur. Bütün sayılar UHeM Altay'da tek bir A100 koşusundan (3 saat 8 dk) gelir.
+
+**Text → Image, final sistem (encoder ensemble + BLIP-2 ITM, CV ile seçilen aday havuzu):**
+
+| Veri | R@1 | R@5 | R@10 | v1'e göre ΔR@1 [%95 CI] | Referans |
+|---|---:|---:|---:|---|---|
+| Flickr30k 1K (5000 sorgu) | **89.66** | **98.42** | **99.26** | +1.28 [0.72, 1.88] | BLIP-2 protokolü (bizim kodda) 89.44 / 98.08 / 98.92, fark +0.22 [−0.38, 0.82] anlamlı değil; makalede 89.7 / 98.1 / 98.9 |
+| COCO 5K (25.010 sorgu) | **68.21** | **87.80** | **92.81** | +1.01 … +2.40 (hepsi anlamlı) | BLIP-2 ViT-g COCO fine-tuned (makalede) 68.3 / 87.7 / 92.6 |
+
+Bileşen bazında: BLIP-2 ITC kanalı ilk aşamayı +8 ile +18 R@1 yükseltiyor (en büyük katkı), ızgara bölge
+kırpımları +0.3 ile +1.6, CB-Norm COCO'da +0.2 ile +0.5 (Flickr'da etkisiz), nesne etiketleri ve tespit edilen
+nesne kırpımları CV tarafından kapatıldı. Ayrıntı: `results/tables/{flickr1k,coco5k}_v2.md`, makalede Bölüm V-E
+ve COCO bölümü.
 
 | Bileşen | Kod | Ne yapar |
 |---|---|---|
@@ -133,6 +145,7 @@ Anlamlılık için eşleştirilmiş bootstrap güven aralığı (2000 örnekleme
 ```bash
 python tests/test_v2.py                     # GPU gerektirmeyen birim testleri
 bash scripts/pipelines/run_v2.sh            # Flickr30k (offline CV + canlı yol) ve COCO 5K, kaldığı yerden devam eder
+sbatch scripts/pipelines/v2_slurm.sbatch     # SLURM kümesinde (bölüm/hesap ayarlarını düzenle)
 ```
 
 Çıktılar: `results/tables/{flickr1k,coco5k}_v2.md`, `results/json/*_v2.json` (CV seçimleri dahil),
@@ -143,6 +156,6 @@ adım adım talimatlar: `docs/GPU_RUNBOOK.md`.
 
 ## Rapor
 
-`report/report.pdf` (IEEE konferans formatı, İngilizce, 7 sayfa). Kaynak: `report/report.tex`. Grafikler
+`report/report.pdf` (IEEE konferans formatı, İngilizce, 11 sayfa, v1 + v2). Kaynak: `report/report.tex`. Grafikler
 `python scripts/make_figures.py` ile `report/figures/` altına üretilir. PDF'i yeniden derlemek için `report/`
 klasörünü Overleaf'e yükleyebilir ya da yerel bir LaTeX derleyicisi (TeX Live, MiKTeX, Tectonic) kullanabilirsin.
