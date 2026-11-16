@@ -1,0 +1,14 @@
+fusion:
+  alpha: 0.875
+  full_weights:
+    fused: 0.225
+    te_caption: 0.075
+    te_tags: 0.0
+    region: 0.2
+    itc: 0.5
+  hub_beta: 10.0
+  hub_rho: 0.0
+reranker:
+  top_k: 32
+  weight: 0.85
+  itc_weight: 0.0

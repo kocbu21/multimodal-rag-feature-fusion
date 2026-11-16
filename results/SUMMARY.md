@@ -209,16 +209,43 @@ Pipeline: `bash scripts/pipelines/run_coco5k.sh`.
 - Caveats: one encoder, n=1000 (SE ~1.5 points), BLIP rerank and CLIP encoders not run on COCO; BLIP-2 ITM was fine-tuned on COCO, so this is in-domain for it.
 - Per-file results: `results/tables/coco5k_multi_siglip-base-patch16-224_online_blip2.md`.
 
-# Part 7: v2 (pending GPU run)
+# Part 7: v2 results
 
-New training-free components: region features (grid crops + Florence-2 `<OD>` boxes, max pooling), object tags
-(BGE), BLIP-2 ITC as a first-stage channel, caption-bank hubness normalisation (CB-Norm), an equal-weight ensemble of
-the three dual encoders, and an ITM+ITC reranker over a CV-selected pool (K in {16, 32, 64}). Same 2-fold CV over
-images as before; components are added greedily and every grid contains "off". Reproduced references in the same
-code: BLIP-2's retrieval protocol (ITC top-128 -> ITM logit + ITC) and the v1 system; paired bootstrap CIs.
+One run on UHeM Altay (1x A100 80 GB, 3 h 8 min including caption generation), captions regenerated with the same
+four captioners. Components (all training-free, each added greedily with 2-fold CV over images, every grid contains
+"off"): object tags (BGE), region features (5 grid crops + Florence-2 `<OD>` boxes, max pooling), BLIP-2 ITC as a
+first-stage channel, caption-bank hubness normalisation (CB-Norm), equal-weight ensemble of the three encoders,
+BLIP-2 ITM(+ITC) rerank over a CV-selected pool K. Full tables: `results/tables/flickr1k_v2.md`,
+`results/tables/coco5k_v2.md`; picks: `results/json/*_v2.json`; live: `results/tables/flickr1k_multi_*_online_v2.md`.
 
-Pipeline: `bash scripts/pipelines/run_v2.sh` (see `docs/GPU_RUNBOOK.md`). Results will be in
-`results/tables/flickr1k_v2.md`, `results/tables/coco5k_v2.md` and `results/tables/flickr1k_multi_*_online_v2.md`.
-Code checks done without a GPU: `tests/test_v2.py` (fusion maths, fast ranking, rerank ranks vs. brute force, CV
-isolation), cached BLIP-2 ITM/ITC paths equal `Blip2ForImageTextRetrieval.forward` on a random tiny model, and an
-end-to-end smoke run of build -> upgrade -> experiments_v2 -> live eval on a synthetic 24-image set.
+Sanity checks (v1 recomputed in this run): hybrid 72.58 / 75.60 / 78.94 (v1: 72.78 / 75.64 / 78.78); hybrid + BLIP-2
+top-16 88.38 / 88.36 / 88.30 (v1: 88.58 / 88.36 / 88.28); BLIP-2 protocol re-run 89.44 (paper: 89.7).
+
+Text -> Image R@1, stage-1 chain (CLIP B/32 / CLIP L/14 / SigLIP):
+
+| stage | Flickr30k 1K | COCO 5K |
+|---|---|---|
+| hybrid (v1) | 72.58 / 75.60 / 78.94 | 45.93 / 48.49 / 52.66 |
+| + object tags | off / off / off | off / off / off |
+| + regions | 73.84 / 76.56 / 80.58 | 46.19 / 48.94 / 53.74 |
+| + BLIP-2 ITC | 87.00 / 86.96 / 87.92 | 63.85 / 63.93 / 64.28 |
+| + CB-Norm | 87.00 / 86.88 / 87.92 | 64.32 / 64.26 / 64.50 |
+| ensemble (stage 1) | 87.74 | 64.67 |
+| recall@16, v1 -> v2 | 97.6-98.0 -> 99.4-99.5 | 85.7-89.0 -> 94.6-94.9 |
+
+Final (ensemble + BLIP-2 ITM, CV K; CV gave the ITC term weight 0 in stage 2 because ITC is already in stage 1):
+
+| | R@1 | R@5 | R@10 | dR@1 vs v1 (95% CI) | dR@1 vs BLIP-2 protocol re-run |
+|---|---:|---:|---:|---|---|
+| Flickr30k 1K, K=64 | 89.66 | 98.42 | 99.26 | +1.28 [0.72, 1.88] (B/32), +1.30, +1.36 | +0.22 [-0.38, 0.82], p=0.48 (not significant) |
+| COCO 5K, K=32 | 68.21 | 87.80 | 92.81 | +2.40 [2.09, 2.72], +1.89 [1.58, 2.20], +1.01 [0.70, 1.31] | not re-run (published BLIP-2 COCO-FT: 68.3 / 87.7 / 92.6) |
+
+- The BLIP-2 ITC channel carries most of the gain; it raises candidate recall so that almost all remaining errors
+  are ordering errors of the cross-encoder (Flickr recall@64 99.86 vs R@1 89.66; COCO recall@32 97.68 vs R@1 68.21).
+- Grid crops help a little (+0.3 to +1.6); detected-object crops and object tags were switched off everywhere
+  (tags alone: 5.5 R@1, the `<OD>` vocabulary is too coarse).
+- CB-Norm: neutral on Flickr30k (rho=0 in 5 of 6 folds), positive on COCO (on in all 6 folds, +0.22 to +0.47).
+- Single-encoder v2 systems are within noise of the ensemble (Flickr 89.76 / 89.94 / 89.82, COCO 68.26 / 68.10 / 68.27).
+- Dual softmax over test queries (transductive, not part of the system) hurt with the fixed temperature (81.96 / 58.33).
+- Live path (1000 queries, CV-derived settings): 89.1 / 88.9 / 89.7 R@1 with reranking, 86.1 / 85.9 / 85.8 for stage 1;
+  22 ms per query for stage 1 and 89-128 ms with reranking on an A100.

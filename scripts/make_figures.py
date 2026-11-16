@@ -102,7 +102,7 @@ def fig_v2(dataset="flickr1k"):
     m = json.loads(path.read_text(encoding="utf-8"))["metrics"]
     steps = [("image", "Image\nonly"), ("hybrid (v1)", "Hybrid\n(v1)"), ("+tags", "+obj.\ntags"),
              ("+regions", "+regions"), ("+itc", "+BLIP-2\nITC"), ("+hub (CB-Norm)", "+CB-\nNorm"),
-             ("final -> rerank ITM+ITC", "+ITM/ITC\nrerank")]
+             ("final -> rerank ITM+ITC", "+BLIP-2\nrerank")]
     fig, ax = plt.subplots(figsize=(3.45, 2.45))
     x = list(range(len(steps)))
     for (short, label), c, mk in zip(V2_SHORT, COLORS, MARKERS):
@@ -119,10 +119,12 @@ def fig_v2(dataset="flickr1k"):
         ax.scatter([len(steps) - 1], [m[ens[0]]["R@1"]], marker="*", s=90, color=INK, zorder=4,
                    label=f"Ensemble ({m[ens[0]]['R@1']:.1f})")
     nat = [k for k in m if k.startswith("BLIP-2 protocol")]
-    refs = [(89.7, "BLIP-2 ZS (paper)", ":")] + ([(m[nat[0]]["R@1"], "BLIP-2 ZS (reproduced)", "--")] if nat else [])
-    for v, lab, ls in refs:
+    published = {"flickr1k": (89.7, "BLIP-2 ZS (paper)"), "coco5k": (68.3, "BLIP-2 fine-tuned on COCO (paper)")}[dataset]
+    refs = [(*published, ":")] + ([(m[nat[0]]["R@1"], "BLIP-2 protocol (reproduced)", "--")] if nat else [])
+    for i, (v, lab, ls) in enumerate(refs):
         ax.axhline(v, color=INK2, lw=0.8, ls=ls, zorder=1)
-        ax.annotate(f"{lab} {v:.1f}", (0, v), xytext=(0, 2), textcoords="offset points", fontsize=5.5, color=INK2)
+        ax.annotate(f"{lab} {v:.1f}", (0, v), xytext=(0, 2 if i == 0 else -2), textcoords="offset points",
+                    va="bottom" if i == 0 else "top", fontsize=5.5, color=INK2)
     ax.set_xticks(x, [s[1] for s in steps], fontsize=5.5)
     ax.set_ylabel("Text→Image R@1 (%)")
     ax.grid(axis="y", color=GRID, lw=0.6, zorder=0)
