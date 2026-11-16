@@ -5,7 +5,8 @@
 #   COCO=0 bash scripts/pipelines/run_v2.sh          # Flickr30k only
 #   SLEEP=0.2 bash scripts/pipelines/run_v2.sh       # quiet mode (pause after each GPU batch); default 0 = full speed
 #
-# Environment knobs: PY (python executable), ENCODERS, SLEEP, COCO, COCO_KS, COCO_NATIVE_K, COCO_MAX_Q, LIVE_N.
+# Environment knobs: PY (python executable), ENCODERS, SLEEP, COCO, COCO_KS, COCO_NATIVE_K, COCO_MAX_Q, LIVE_N,
+# CFG (extra YAML for index building / experiments, e.g. throttle.gpu_sleep_s: 0), CAPTION_BATCH, ITM_BATCH.
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 
@@ -22,6 +23,9 @@ COCO_KS=${COCO_KS:-16,32}
 COCO_NATIVE_K=${COCO_NATIVE_K:-0}
 COCO_MAX_Q=${COCO_MAX_Q:-0}
 LIVE_N=${LIVE_N:-1000}
+CFG=${CFG:-}
+CAPTION_BATCH=${CAPTION_BATCH:-8}
+ITM_BATCH=${ITM_BATCH:-32}
 mkdir -p logs
 LOG=logs/run_v2_$(date +%Y%m%d_%H%M%S).log
 exec > >(tee -a "$LOG") 2>&1
@@ -37,17 +41,19 @@ for DS in flickr1k $([ "$COCO" = "1" ] && echo coco5k); do
     OUT=indexes/${DS}_multi_$(slug "$ENC")
     if [ ! -f "$OUT/store.json" ]; then
       step "build $OUT (captions are cached in data/caption_cache.json and shared)"
-      $PY scripts/build_index.py --source "$DS" --encoder "$ENC" --text-embedder --out "$OUT"
+      $PY scripts/build_index.py ${CFG:+--config "$CFG"} --source "$DS" --encoder "$ENC" --text-embedder --out "$OUT" \
+          --caption-batch-size "$CAPTION_BATCH"
     fi
   done
 
   if [ "$DS" = flickr1k ]; then
     step "experiments_v2 $DS (offline, 5000 queries, 2-fold CV)"
-    $PY scripts/experiments_v2.py --dataset "$DS" --encoders "$ENC_CSV" --rerank-ks 16,32,64 --native-k 128 --sleep "$SLEEP"
+    $PY scripts/experiments_v2.py ${CFG:+--config "$CFG"} --dataset "$DS" --encoders "$ENC_CSV" --rerank-ks 16,32,64 \
+        --native-k 128 --sleep "$SLEEP" --itm-batch "$ITM_BATCH"
   else
     step "experiments_v2 $DS (offline, 2-fold CV)"
-    $PY scripts/experiments_v2.py --dataset "$DS" --encoders "$ENC_CSV" --rerank-ks "$COCO_KS" \
-        --native-k "$COCO_NATIVE_K" --max-queries "$COCO_MAX_Q" --sleep "$SLEEP" --no-region-ablation
+    $PY scripts/experiments_v2.py ${CFG:+--config "$CFG"} --dataset "$DS" --encoders "$ENC_CSV" --rerank-ks "$COCO_KS" \
+        --native-k "$COCO_NATIVE_K" --max-queries "$COCO_MAX_Q" --sleep "$SLEEP" --no-region-ablation --itm-batch "$ITM_BATCH"
   fi
   $PY scripts/v2_live_config.py --dataset "$DS"
 
@@ -56,7 +62,7 @@ for DS in flickr1k $([ "$COCO" = "1" ] && echo coco5k); do
       OUT=indexes/${DS}_multi_$(slug "$ENC")
       if ! grep -q '"region"' "$OUT/store.json"; then
         step "add v2 vectors to $OUT"
-        $PY scripts/build_index.py --upgrade "$OUT"
+        $PY scripts/build_index.py ${CFG:+--config "$CFG"} --upgrade "$OUT"
       fi
       step "live eval $OUT with configs/v2_${DS}_$(slug "$ENC").yaml"
       $PY scripts/eval_online.py --store "$OUT" --config "configs/v2_${DS}_$(slug "$ENC").yaml" --n "$LIVE_N" \
