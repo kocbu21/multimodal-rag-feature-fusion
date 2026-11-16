@@ -148,6 +148,7 @@ def main():
     ap.add_argument("--device", default="auto")
     ap.add_argument("--sleep", type=float, default=None, help="override throttle.gpu_sleep_s (default: config)")
     ap.add_argument("--tag", default="", help="suffix for the output files")
+    ap.add_argument("--itm-batch", type=int, default=32, help="ITM / ITC batch size (raise on large GPUs)")
     args = ap.parse_args()
 
     t_start = time.time()
@@ -225,7 +226,7 @@ def main():
         nonlocal rr
         if rr is None:
             from mmrag.reranker import ITMReranker
-            rr = ITMReranker(args.reranker, device, sleep_s=sleep_s)
+            rr = ITMReranker(args.reranker, device, batch_size=args.itm_batch, sleep_s=sleep_s)
         return rr
 
     def itc_matrix(T, Z, chunk=512):
