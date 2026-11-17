@@ -28,4 +28,16 @@ def load_retriever(store_dir: str, cfg: dict, rerank: bool | None = None) -> Mul
         reranker = ITMReranker(cfg["reranker"]["name"], device, sleep_s=sleep_s)
         cfg["reranker"]["enabled"] = True
 
-    return MultimodalRetriever(store, build_encoder(cfg), cfg, text_embedder=text_embedder, reranker=reranker)
+    extra, vlm = [], None
+    if use_rr:   # v3 cascade: reranker.extra = [{name, weight}], reranker.vlm = {name, top_m, weight}
+        from .reranker import ITMReranker
+        for e in cfg["reranker"].get("extra") or []:
+            if e.get("weight", 0):
+                extra.append((ITMReranker(e["name"], device, sleep_s=sleep_s), float(e["weight"])))
+        v = cfg["reranker"].get("vlm") or {}
+        if v.get("name") and v.get("weight", 0):
+            from .vlm_scorer import VLMScorer
+            vlm = (VLMScorer(v["name"], device, sleep_s=sleep_s), int(v.get("top_m", 8)), float(v["weight"]))
+
+    return MultimodalRetriever(store, build_encoder(cfg), cfg, text_embedder=text_embedder, reranker=reranker,
+                               extra_rerankers=extra, vlm=vlm)

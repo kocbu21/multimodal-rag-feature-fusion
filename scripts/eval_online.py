@@ -91,5 +91,7 @@ def main():
 
 if __name__ == "__main__":
     import os
+    import sys
     main()
+    sys.stdout.flush()   # os._exit skips the normal flush, which loses the output when it is redirected to a file
     os._exit(0)
