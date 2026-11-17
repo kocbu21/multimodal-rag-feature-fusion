@@ -91,5 +91,7 @@ def main():
 
 if __name__ == "__main__":
     import os
+    import sys
     main()
+    sys.stdout.flush()
     os._exit(0)

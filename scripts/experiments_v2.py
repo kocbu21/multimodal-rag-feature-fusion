@@ -52,7 +52,7 @@ BANK_CAPS = ["Salesforce/blip-image-captioning-base", "Salesforce/blip-image-cap
 SHORT = {CAPS4[0]: "blip-b", CAPS4[1]: "blip-l", CAPS4[2]: "flor-d", CAPS4[3]: "flor-md"}
 ENCODERS = ["openai/clip-vit-base-patch32", "openai/clip-vit-large-patch14", "google/siglip-base-patch16-224"]
 SHORT_ENC = {"openai/clip-vit-base-patch32": "CLIP-B/32", "openai/clip-vit-large-patch14": "CLIP-L/14",
-             "google/siglip-base-patch16-224": "SigLIP-B"}
+             "google/siglip-base-patch16-224": "SigLIP-B", "google/siglip2-so400m-patch14-384": "SigLIP2-SO400M"}
 ALPHAS = [0.5, 0.6, 0.7, 0.8, 0.85, 0.9, 0.95, 1.0]
 WEIGHTS = [round(float(x), 2) for x in np.linspace(0, 1, 11)]
 HUB_GRID = [(b, r) for b in (10.0, 20.0, 50.0) for r in (0.0, 0.25, 0.5, 0.75, 1.0)]
@@ -149,6 +149,14 @@ def main():
     ap.add_argument("--sleep", type=float, default=None, help="override throttle.gpu_sleep_s (default: config)")
     ap.add_argument("--tag", default="", help="suffix for the output files")
     ap.add_argument("--itm-batch", type=int, default=32, help="ITM / ITC batch size (raise on large GPUs)")
+    ap.add_argument("--extra-rerankers", default="", help="extra ITM cross-encoders (comma-separated), e.g. "
+                    "Salesforce/blip-itm-large-coco; added greedily to the v2 stage-2 score with CV weights")
+    ap.add_argument("--ft-rerankers", default="", help="cross-encoders fine-tuned on the target benchmark's train split "
+                    "(Flickr30k only); reported as a separate FT protocol, e.g. Salesforce/blip-itm-large-flickr")
+    ap.add_argument("--vlm", default="", help="generative VLM for yes/no verification of the top-M, e.g. "
+                    "Qwen/Qwen2.5-VL-7B-Instruct")
+    ap.add_argument("--vlm-m", default="4,8", help="candidate counts M for VLM verification (CV-selected)")
+    ap.add_argument("--vlm-batch", type=int, default=16)
     args = ap.parse_args()
 
     t_start = time.time()
@@ -361,6 +369,7 @@ def main():
 
     rows_out, ranks_store, picks_out = [], {}, {}
     rerank_results: dict = {}
+    v3_info: dict = {}
 
     def add(method, S=None, ranks=None, extra="", group=""):
         r = gt_rank(S, gt) if ranks is None else ranks
@@ -550,6 +559,12 @@ def main():
             add(f"BLIP-2 protocol (ITC top-{args.native_k} -> ITM logit + ITC)",
                 ranks=rerank_ranks_sub(comb, native, gt, base), extra="reproduced, no tuning", group="reference")
 
+        extra = [m for m in args.extra_rerankers.split(",") if m]
+        ft = [m for m in args.ft_rerankers.split(",") if m] if args.dataset == "flickr1k" else []
+        if extra or ft or args.vlm:
+            v3_cascade(args, chains, finals, topk, rerank_results, itm_of, X_eval, extra, ft, qsel, queries_all,
+                       paths, gt, fold, n_q, cache_dir, device, sleep_s, add, ranks_store, v3_info)
+
     sig = {}
     ours = [k for k in ranks_store if k.startswith("ensemble final -> rerank ITM+ITC")] or \
            [k for k in ranks_store if k.endswith("final -> rerank ITM+ITC")] or \
@@ -558,6 +573,10 @@ def main():
         for ref in [k for k in ranks_store if "(v1 protocol)" in k or k.startswith("BLIP-2 protocol")]:
             sig[f"{ours[0]} vs {ref}"] = paired_bootstrap(ranks_store[ref], ranks_store[ours[0]])
             print(f"significance: {ours[0]} vs {ref}: {sig[f'{ours[0]} vs {ref}']}", flush=True)
+    for v3_key in [k for k in ranks_store if k.startswith("v3 ")]:
+        for ref in [k for k in ranks_store if k == (ours[0] if ours else None) or k.startswith("BLIP-2 protocol")]:
+            sig[f"{v3_key} vs {ref}"] = paired_bootstrap(ranks_store[ref], ranks_store[v3_key])
+            print(f"significance: {v3_key} vs {ref}: {sig[f'{v3_key} vs {ref}']}", flush=True)
 
     import pandas as pd
 
@@ -585,9 +604,193 @@ def main():
                "live_flat_weights_suggestion": {E: [flat_weights(p) for p in ps] for E, ps in picks_out.items()},
                "rerank_picks": {k: [[K, list(lam) if isinstance(lam, tuple) else lam] for K, lam in v]
                                 for k, v in rerank_results.items()},
-               "significance": sig, "runtime_min": (time.time() - t_start) / 60}
+               "significance": sig, "v3": v3_info, "runtime_min": (time.time() - t_start) / 60}
     (out_j / f"{name}.json").write_text(json.dumps(summary, indent=2, default=float), encoding="utf-8")
     print(f"wrote {out_t / (name + '.md')} and {out_j / (name + '.json')}  ({summary['runtime_min']:.1f} min)")
+
+
+def _pair_cache(path):
+    if path.exists():
+        z = np.load(path)
+        return dict(zip(zip(z["q"].tolist(), z["i"].tolist()), z["s"].tolist()))
+    return {}
+
+
+def _save_pairs(path, known):
+    keys = list(known)
+    np.savez(path, q=np.array([k[0] for k in keys], np.int64), i=np.array([k[1] for k in keys], np.int64),
+             s=np.array([known[k] for k in keys], np.float32))
+
+
+def score_cross_encoder(model, pairs, queries_all, paths, cache_dir, device, sleep_s, batch):
+    """P(match) of an ITM cross-encoder (BLIP or BLIP-2) for (query index, image index) pairs, cached on disk."""
+    path = cache_dir / f"itmx_{slug(model)}.npz"
+    known = _pair_cache(path)
+    need = sorted({p for p in pairs if p not in known}, key=lambda p: p[1])
+    print(f"{model}: {len(need)} pairs to score (cached {len(known)})", flush=True)
+    if need:
+        from mmrag.reranker import ITMReranker
+        r = ITMReranker(model, device, batch_size=batch, sleep_s=sleep_s)
+        by_img: dict[int, list[int]] = {}
+        for q0, i in need:
+            by_img.setdefault(i, []).append(q0)
+        imgs, t0, done = sorted(by_img), time.time(), 0
+        for c in range(0, len(imgs), 128):
+            chunk = imgs[c : c + 128]
+            part = [(q0, i) for i in chunk for q0 in by_img[i]]
+            r.image_features([paths[i] for i in chunk])
+            known.update(zip(part, r.score_pairs([queries_all[q] for q, _ in part], [paths[i] for _, i in part]).tolist()))
+            r.clear_cache()
+            done += len(part)
+            print(f"  {model.split('/')[-1]} {done}/{len(need)} pairs, {done / (time.time() - t0):.0f} pairs/s", flush=True)
+        _save_pairs(path, known)
+        del r
+        torch.cuda.empty_cache()
+    return known
+
+
+def score_vlm(model, pairs, queries_all, paths, cache_dir, device, sleep_s, batch):
+    """Yes/no log-odds of a generative VLM for (query index, image index) pairs, cached on disk."""
+    path = cache_dir / f"vlm_{slug(model)}.npz"
+    known = _pair_cache(path)
+    need = sorted({p for p in pairs if p not in known}, key=lambda p: p[1])
+    print(f"{model}: {len(need)} pairs to score (cached {len(known)})", flush=True)
+    if need:
+        from mmrag.vlm_scorer import VLMScorer
+        v = VLMScorer(model, device, batch_size=batch, sleep_s=sleep_s)
+        t0 = time.time()
+        for c in range(0, len(need), 2048):
+            part = need[c : c + 2048]
+            known.update(zip(part, v.score_pairs([queries_all[q] for q, _ in part], [paths[i] for _, i in part]).tolist()))
+            print(f"  VLM {c + len(part)}/{len(need)} pairs, {(c + len(part)) / (time.time() - t0):.1f} pairs/s", flush=True)
+            if c // 2048 % 5 == 4:
+                _save_pairs(path, known)
+        _save_pairs(path, known)
+        del v
+        torch.cuda.empty_cache()
+    return known
+
+
+def v3_cascade(args, chains, finals, topk, rerank_results, itm_of, X_eval, extra, ft, qsel, queries_all, paths, gt,
+               fold, n_q, cache_dir, device, sleep_s, add, ranks_store, v3_info):
+    """v2 stage 2 -> + extra cross-encoders (greedy CV) -> [+ FT cross-encoder] -> VLM yes/no on the top-M (CV M, weight).
+
+    Runs on the ensemble chain, fixed in advance. Every step starts from the per-fold picks of the previous step,
+    exactly like the stage-1 chain, and every weight grid contains 0."""
+    cname = "ensemble final" if "ensemble final" in chains else f"{next(iter(finals))} final"
+    key2 = next(k for k in (f"{cname} -> rerank ITM+ITC", f"{cname} -> rerank ITM") if k in rerank_results)
+    cand = topk[cname]
+    Kmax = cand.shape[1]
+    base1 = gt_rank(chains[cname], gt)
+    Pi = itm_of(cand)
+    F = np.take_along_axis(chains[cname], cand, 1)
+    X = np.take_along_axis(X_eval, cand, 1)
+    q0 = qsel[:, None].repeat(Kmax, 1)
+    pairs_all = list(zip(q0.ravel().tolist(), cand.ravel().tolist()))
+    feats = {}
+    for model in extra + ft:
+        known = score_cross_encoder(model, pairs_all, queries_all, paths, cache_dir, device, sleep_s, args.itm_batch)
+        feats[model] = np.array([known[p] for p in pairs_all], np.float32).reshape(n_q, Kmax)
+    V = np.full((n_q, Kmax), np.nan, np.float32)
+
+    params = []
+    for K, lam in rerank_results[key2]:
+        params.append({"K": int(K), "lam": tuple(lam) if isinstance(lam, (tuple, list)) else (float(lam), 0.0)})
+
+    def pre_vlm(P, rows):
+        K = P["K"]
+        a, b = P["lam"]
+        c = a * zscore_rows(Pi[rows, :K]) + (1 - a - b) * zscore_rows(F[rows, :K]) + b * zscore_rows(X[rows, :K])
+        for j, model in enumerate(extra + ft):
+            g = P.get(f"x{j}", 0.0)
+            if g:
+                c = (1 - g) * zscore_rows(c) + g * zscore_rows(feats[model][rows, :K])
+        return c
+
+    def scores(P, rows):
+        c = pre_vlm(P, rows)
+        gv, M = P.get("gv", 0.0), P.get("M", 0)
+        if gv and M:
+            order = np.argsort(-c, axis=1)[:, :M]
+            vals = np.take_along_axis(c, order, 1)
+            vv = np.take_along_axis(V[rows, : P["K"]], order, 1)
+            assert not np.isnan(vv).any(), "VLM score missing for a top-M candidate"
+            c = c.copy()
+            np.put_along_axis(c, order, 1e3 + (1 - gv) * zscore_rows(vals) + gv * zscore_rows(vv), axis=1)
+        return c
+
+    def ranks_for(P, rows):
+        return rerank_ranks_sub(scores(P, rows), cand[rows, : P["K"]], gt[rows], base1[rows])
+
+    def pick(key, grid):
+        for f in (0, 1):
+            m = fold == f
+            params[f][key] = max(grid, key=lambda g: metrics_from_ranks(ranks_for({**params[f], key: g}, m))["RSUM"])
+        out = np.empty(n_q, np.int64)
+        for f in (0, 1):
+            other = fold != f
+            out[other] = ranks_for(params[f], other)
+        return out, [params[f][key] for f in (0, 1)]
+
+    def compose():
+        out = np.empty(n_q, np.int64)
+        for f in (0, 1):
+            other = fold != f
+            out[other] = ranks_for(params[f], other)
+        return out
+
+    grp = f"v3 cascade on {cname}"
+    add(f"{cname} -> v2 stage 2 (recomputed)", ranks=compose(), extra=f"picks={rerank_results[key2]}", group=grp)
+
+    def vlm_step(label, models_on):
+        if not args.vlm:
+            return None
+        Ms = sorted(int(m) for m in args.vlm_m.split(",") if m)
+        need = set()
+        for f in (0, 1):
+            P = {k: v for k, v in params[f].items() if k not in ("gv", "M")}
+            order = np.argsort(-pre_vlm(P, np.ones(n_q, bool)), axis=1)[:, : max(Ms)]
+            pos = order
+            need.update(zip(np.repeat(qsel, pos.shape[1]).tolist(), np.take_along_axis(cand, pos, 1).ravel().tolist()))
+        known = score_vlm(args.vlm, need, queries_all, paths, cache_dir, device, sleep_s, args.vlm_batch)
+        qidx = {q: r for r, q in enumerate(qsel.tolist())}
+        for (q, i), v in known.items():
+            r = qidx.get(q)
+            if r is not None:
+                hit = np.flatnonzero(cand[r] == i)
+                if len(hit):
+                    V[r, hit[0]] = v
+        grid = [(M, g) for M in Ms for g in WEIGHTS]
+        for f in (0, 1):
+            m = fold == f
+            best = max(grid, key=lambda mg: metrics_from_ranks(ranks_for({**params[f], "M": mg[0], "gv": mg[1]}, m))["RSUM"])
+            params[f]["M"], params[f]["gv"] = best
+        r = compose()
+        add(label, ranks=r, extra=f"(M, w_vlm) per fold={[(params[f]['M'], params[f]['gv']) for f in (0, 1)]}", group=grp)
+        return r
+
+    for j, model in enumerate(extra):
+        r, pk = pick(f"x{j}", WEIGHTS)
+        add(f"{cname} -> + {model.split('/')[-1]}", ranks=r, extra=f"w={pk}", group=grp)
+    final_zs = vlm_step(f"v3 (zero-shot protocol): + VLM {args.vlm.split('/')[-1]}", extra) if args.vlm else None
+    if final_zs is None and extra:
+        ranks_store["v3 (zero-shot protocol)"] = compose()
+        add("v3 (zero-shot protocol)", ranks=ranks_store["v3 (zero-shot protocol)"], group=grp)
+    v3_info["zero_shot"] = [dict(p) for p in params]
+    if ft:
+        for f in (0, 1):
+            params[f].pop("gv", None)
+            params[f].pop("M", None)
+        for j, model in enumerate(ft, start=len(extra)):
+            r, pk = pick(f"x{j}", WEIGHTS)
+            add(f"{cname} -> + {model.split('/')[-1]} [FT on {args.dataset}]", ranks=r, extra=f"w={pk}", group=grp)
+        if args.vlm:
+            vlm_step(f"v3 (FT protocol): + VLM {args.vlm.split('/')[-1]}", extra + ft)
+        else:
+            add("v3 (FT protocol)", ranks=compose(), group=grp)
+        v3_info["ft"] = [dict(p) for p in params]
+    v3_info["chain"] = cname
+    v3_info["models"] = {"extra": extra, "ft": ft, "vlm": args.vlm}
 
 
 def rerank_ranks_sub(comb: np.ndarray, tk: np.ndarray, gt: np.ndarray, base: np.ndarray) -> np.ndarray:

@@ -44,9 +44,11 @@ class Hit:
 
 class MultimodalRetriever:
     def __init__(self, store: UnifiedVectorStore, encoder: DualEncoder, cfg: dict,
-                 text_embedder=None, reranker=None):
+                 text_embedder=None, reranker=None, extra_rerankers=None, vlm=None):
         self.store, self.encoder, self.cfg = store, encoder, cfg
         self.text_embedder, self.reranker = text_embedder, reranker
+        self.extra_rerankers = extra_rerankers or []
+        self.vlm = vlm
 
     def embed_query(self, text: str | None = None, image: Image.Image | str | None = None,
                     beta: float | None = None) -> np.ndarray:
@@ -140,6 +142,20 @@ class MultimodalRetriever:
             comb = comb + lam_itc * zscore_rows(itc[None])[0]
             for h, x in zip(img_hits, itc):
                 h.sources["itc_rr"] = float(x)
+        for rr, g in self.extra_rerankers:
+            if g:
+                p = rr.score_pairs([text] * len(img_hits), img_paths)
+                comb = (1 - g) * zscore_rows(comb[None])[0] + g * zscore_rows(p[None])[0]
+                for h, x in zip(img_hits, p):
+                    h.sources[f"itm_{rr.blip2 and 'blip2' or 'blip'}_x"] = float(x)
+        if self.vlm is not None and self.vlm[2]:
+            scorer, top_m, gv = self.vlm
+            top = np.argsort(-comb)[:top_m]
+            v = scorer.score_pairs([text] * len(top), [img_paths[i] for i in top])
+            comb = comb.copy()
+            comb[top] = 1e3 + (1 - gv) * zscore_rows(comb[top][None])[0] + gv * zscore_rows(v[None])[0]
+            for i, x in zip(top, v):
+                img_hits[i].sources["vlm"] = float(x)
         for h, s, c in zip(img_hits, itm, comb):
             h.sources["itm"] = float(s)
             h.score = float(c)
