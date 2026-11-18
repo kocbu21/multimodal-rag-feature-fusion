@@ -122,7 +122,7 @@ def fig_v2(dataset="flickr1k", tag=""):
     v3 = [(k, lab, mk) for prefix, lab, mk in (("v3 (zero-shot protocol)", "v3 zero-shot", "P"), ("v3 (FT protocol)", "v3 FT", "X"))
           for k in m if k.startswith(prefix)]
     if v3:
-        steps = steps + [("v3", "+cross-enc.\nens. + VLM")]
+        steps = steps + [("v3", "v3:\n+VLM")]
         x = list(range(len(steps)))
         for k, lab, mk in v3:
             ax.scatter([len(steps) - 1], [m[k]["R@1"]], marker=mk, s=70, color=INK, zorder=4,
