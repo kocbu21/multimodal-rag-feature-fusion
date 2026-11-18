@@ -1,0 +1,1244 @@
+{
+  "dataset": "flickr1k",
+  "n_images": 1000,
+  "n_queries": 5000,
+  "encoders": [
+    "openai/clip-vit-base-patch32",
+    "openai/clip-vit-large-patch14",
+    "google/siglip-base-patch16-224",
+    "google/siglip2-so400m-patch14-384"
+  ],
+  "encoder_short": {
+    "CLIP-B/32": "openai/clip-vit-base-patch32",
+    "CLIP-L/14": "openai/clip-vit-large-patch14",
+    "SigLIP-B": "google/siglip-base-patch16-224",
+    "SigLIP2-SO400M": "google/siglip2-so400m-patch14-384"
+  },
+  "reranker": "Salesforce/blip2-itm-vit-g-coco",
+  "rerank_ks": [
+    16,
+    32,
+    64
+  ],
+  "regions": [
+    "grid",
+    "od"
+  ],
+  "metrics": {
+    "CLIP-B/32 image": {
+      "R@1": 58.720000000000006,
+      "R@5": 83.39999999999999,
+      "R@10": 90.06,
+      "RSUM": 232.18,
+      "MRR": 69.68501276694533
+    },
+    "CLIP-B/32 early[multi]": {
+      "R@1": 69.54,
+      "R@5": 89.58,
+      "R@10": 94.02000000000001,
+      "RSUM": 253.14000000000001,
+      "MRR": 78.38735428045341
+    },
+    "CLIP-B/32 hybrid (v1)": {
+      "R@1": 72.56,
+      "R@5": 92.22,
+      "R@10": 95.89999999999999,
+      "RSUM": 260.68,
+      "MRR": 81.23471678323108
+    },
+    "CLIP-B/32 hybrid +regions[grid] (ablation)": {
+      "R@1": 73.42,
+      "R@5": 92.9,
+      "R@10": 96.46000000000001,
+      "RSUM": 262.78,
+      "MRR": 81.97321792169863
+    },
+    "CLIP-B/32 hybrid +regions[od] (ablation)": {
+      "R@1": 72.56,
+      "R@5": 92.22,
+      "R@10": 95.89999999999999,
+      "RSUM": 260.68,
+      "MRR": 81.23471678323108
+    },
+    "CLIP-B/32 hybrid +itc only (ablation)": {
+      "R@1": 86.8,
+      "R@5": 97.48,
+      "R@10": 99.02,
+      "RSUM": 283.3,
+      "MRR": 91.57551772390833
+    },
+    "CLIP-B/32 +tags": {
+      "R@1": 72.56,
+      "R@5": 92.22,
+      "R@10": 95.89999999999999,
+      "RSUM": 260.68,
+      "MRR": 81.23471678323108
+    },
+    "CLIP-B/32 +regions": {
+      "R@1": 73.83999999999999,
+      "R@5": 92.9,
+      "R@10": 96.41999999999999,
+      "RSUM": 263.15999999999997,
+      "MRR": 82.23037810165496
+    },
+    "CLIP-B/32 +itc": {
+      "R@1": 87.0,
+      "R@5": 97.6,
+      "R@10": 98.98,
+      "RSUM": 283.58,
+      "MRR": 91.72126766117312
+    },
+    "CLIP-B/32 +hub (CB-Norm)": {
+      "R@1": 87.0,
+      "R@5": 97.6,
+      "R@10": 98.98,
+      "RSUM": 283.58,
+      "MRR": 91.72126766117312
+    },
+    "CLIP-L/14 image": {
+      "R@1": 64.58,
+      "R@5": 87.06,
+      "R@10": 92.2,
+      "RSUM": 243.83999999999997,
+      "MRR": 74.53664468147444
+    },
+    "CLIP-L/14 early[multi]": {
+      "R@1": 72.94,
+      "R@5": 92.14,
+      "R@10": 95.62,
+      "RSUM": 260.7,
+      "MRR": 81.4207947007343
+    },
+    "CLIP-L/14 hybrid (v1)": {
+      "R@1": 75.6,
+      "R@5": 93.7,
+      "R@10": 96.78,
+      "RSUM": 266.08000000000004,
+      "MRR": 83.54206358124662
+    },
+    "CLIP-L/14 hybrid +regions[grid] (ablation)": {
+      "R@1": 76.3,
+      "R@5": 94.62,
+      "R@10": 97.11999999999999,
+      "RSUM": 268.04,
+      "MRR": 84.22754679327416
+    },
+    "CLIP-L/14 hybrid +regions[od] (ablation)": {
+      "R@1": 75.6,
+      "R@5": 93.7,
+      "R@10": 96.78,
+      "RSUM": 266.08000000000004,
+      "MRR": 83.54206358124662
+    },
+    "CLIP-L/14 hybrid +itc only (ablation)": {
+      "R@1": 86.86,
+      "R@5": 97.66,
+      "R@10": 99.0,
+      "RSUM": 283.52,
+      "MRR": 91.63412764221128
+    },
+    "CLIP-L/14 +tags": {
+      "R@1": 75.6,
+      "R@5": 93.7,
+      "R@10": 96.78,
+      "RSUM": 266.08000000000004,
+      "MRR": 83.54206358124662
+    },
+    "CLIP-L/14 +regions": {
+      "R@1": 76.55999999999999,
+      "R@5": 94.64,
+      "R@10": 97.11999999999999,
+      "RSUM": 268.32,
+      "MRR": 84.46349109096917
+    },
+    "CLIP-L/14 +itc": {
+      "R@1": 86.96000000000001,
+      "R@5": 97.82,
+      "R@10": 99.06,
+      "RSUM": 283.84000000000003,
+      "MRR": 91.75537640689217
+    },
+    "CLIP-L/14 +hub (CB-Norm)": {
+      "R@1": 86.88,
+      "R@5": 97.84,
+      "R@10": 99.06,
+      "RSUM": 283.78,
+      "MRR": 91.73843272175002
+    },
+    "SigLIP-B image": {
+      "R@1": 74.66000000000001,
+      "R@5": 92.32000000000001,
+      "R@10": 95.6,
+      "RSUM": 262.58000000000004,
+      "MRR": 82.43529566625665
+    },
+    "SigLIP-B early[multi]": {
+      "R@1": 78.02,
+      "R@5": 93.62,
+      "R@10": 96.66,
+      "RSUM": 268.29999999999995,
+      "MRR": 84.94566176390981
+    },
+    "SigLIP-B hybrid (v1)": {
+      "R@1": 78.94,
+      "R@5": 94.3,
+      "R@10": 97.04,
+      "RSUM": 270.28000000000003,
+      "MRR": 85.81556669778524
+    },
+    "SigLIP-B hybrid +regions[grid] (ablation)": {
+      "R@1": 80.60000000000001,
+      "R@5": 95.56,
+      "R@10": 97.64,
+      "RSUM": 273.8,
+      "MRR": 87.1520324237269
+    },
+    "SigLIP-B hybrid +regions[od] (ablation)": {
+      "R@1": 78.94,
+      "R@5": 94.3,
+      "R@10": 97.04,
+      "RSUM": 270.28000000000003,
+      "MRR": 85.81556669778524
+    },
+    "SigLIP-B hybrid +itc only (ablation)": {
+      "R@1": 87.1,
+      "R@5": 97.6,
+      "R@10": 98.94,
+      "RSUM": 283.64,
+      "MRR": 91.75786151961478
+    },
+    "SigLIP-B +tags": {
+      "R@1": 78.94,
+      "R@5": 94.3,
+      "R@10": 97.04,
+      "RSUM": 270.28000000000003,
+      "MRR": 85.81556669778524
+    },
+    "SigLIP-B +regions": {
+      "R@1": 80.58,
+      "R@5": 95.58,
+      "R@10": 97.7,
+      "RSUM": 273.86,
+      "MRR": 87.22899607261087
+    },
+    "SigLIP-B +itc": {
+      "R@1": 87.92,
+      "R@5": 97.74000000000001,
+      "R@10": 99.03999999999999,
+      "RSUM": 284.70000000000005,
+      "MRR": 92.284539754449
+    },
+    "SigLIP-B +hub (CB-Norm)": {
+      "R@1": 87.92,
+      "R@5": 97.74000000000001,
+      "R@10": 99.03999999999999,
+      "RSUM": 284.70000000000005,
+      "MRR": 92.284539754449
+    },
+    "SigLIP2-SO400M image": {
+      "R@1": 79.08,
+      "R@5": 94.16,
+      "R@10": 97.0,
+      "RSUM": 270.24,
+      "MRR": 85.88722212035235
+    },
+    "SigLIP2-SO400M early[multi]": {
+      "R@1": 79.88,
+      "R@5": 94.62,
+      "R@10": 97.32,
+      "RSUM": 271.82,
+      "MRR": 86.54970233769232
+    },
+    "SigLIP2-SO400M hybrid (v1)": {
+      "R@1": 81.96,
+      "R@5": 95.78,
+      "R@10": 97.86,
+      "RSUM": 275.6,
+      "MRR": 88.12216759719654
+    },
+    "SigLIP2-SO400M hybrid +regions[grid] (ablation)": {
+      "R@1": 82.22,
+      "R@5": 95.82000000000001,
+      "R@10": 97.98,
+      "RSUM": 276.02000000000004,
+      "MRR": 88.3220544884279
+    },
+    "SigLIP2-SO400M hybrid +regions[od] (ablation)": {
+      "R@1": 81.96,
+      "R@5": 95.78,
+      "R@10": 97.86,
+      "RSUM": 275.6,
+      "MRR": 88.12216759719654
+    },
+    "SigLIP2-SO400M hybrid +itc only (ablation)": {
+      "R@1": 87.88,
+      "R@5": 97.68,
+      "R@10": 99.06,
+      "RSUM": 284.62,
+      "MRR": 92.27075751437897
+    },
+    "SigLIP2-SO400M +tags": {
+      "R@1": 81.96,
+      "R@5": 95.78,
+      "R@10": 97.86,
+      "RSUM": 275.6,
+      "MRR": 88.12216759719654
+    },
+    "SigLIP2-SO400M +regions": {
+      "R@1": 82.86,
+      "R@5": 95.88,
+      "R@10": 98.1,
+      "RSUM": 276.84000000000003,
+      "MRR": 88.73728667724589
+    },
+    "SigLIP2-SO400M +itc": {
+      "R@1": 88.03999999999999,
+      "R@5": 97.82,
+      "R@10": 99.14,
+      "RSUM": 285.0,
+      "MRR": 92.39854047115037
+    },
+    "SigLIP2-SO400M +hub (CB-Norm)": {
+      "R@1": 88.03999999999999,
+      "R@5": 97.74000000000001,
+      "R@10": 99.08,
+      "RSUM": 284.86,
+      "MRR": 92.4037917556326
+    },
+    "ensemble(CLIP-B/32+CLIP-L/14+SigLIP-B+SigLIP2-SO400M)": {
+      "R@1": 88.16000000000001,
+      "R@5": 97.76,
+      "R@10": 99.18,
+      "RSUM": 285.1,
+      "MRR": 92.47109695920525
+    },
+    "ensemble + dual-softmax [TRANSDUCTIVE, not comparable]": {
+      "R@1": 82.67999999999999,
+      "R@5": 95.86,
+      "R@10": 97.86,
+      "RSUM": 276.4,
+      "MRR": 88.46249328572904
+    },
+    "BGE caption concat only": {
+      "R@1": 63.22,
+      "R@5": 85.78,
+      "R@10": 91.2,
+      "RSUM": 240.2,
+      "MRR": 73.30012495184745
+    },
+    "BGE object tags only": {
+      "R@1": 5.66,
+      "R@5": 15.9,
+      "R@10": 23.200000000000003,
+      "RSUM": 44.760000000000005,
+      "MRR": 11.40998526526705
+    },
+    "BLIP-2 ITC only (full gallery)": {
+      "R@1": 85.44,
+      "R@5": 97.16,
+      "R@10": 98.8,
+      "RSUM": 281.4,
+      "MRR": 90.7262039482805
+    },
+    "CLIP-B/32 final recall@16 (bound)": {
+      "R@1": NaN,
+      "R@5": NaN,
+      "R@10": 99.46000000000001,
+      "RSUM": NaN,
+      "MRR": NaN
+    },
+    "CLIP-B/32 final recall@32 (bound)": {
+      "R@1": NaN,
+      "R@5": NaN,
+      "R@10": 99.68,
+      "RSUM": NaN,
+      "MRR": NaN
+    },
+    "CLIP-B/32 final recall@64 (bound)": {
+      "R@1": NaN,
+      "R@5": NaN,
+      "R@10": 99.82,
+      "RSUM": NaN,
+      "MRR": NaN
+    },
+    "CLIP-B/32 final -> rerank ITM": {
+      "R@1": 89.75999999999999,
+      "R@5": 98.28,
+      "R@10": 99.2,
+      "RSUM": 287.24,
+      "MRR": 93.56919234399517
+    },
+    "CLIP-B/32 final -> rerank ITM+ITC": {
+      "R@1": 89.75999999999999,
+      "R@5": 98.28,
+      "R@10": 99.2,
+      "RSUM": 287.24,
+      "MRR": 93.56919234399517
+    },
+    "CLIP-L/14 final recall@16 (bound)": {
+      "R@1": NaN,
+      "R@5": NaN,
+      "R@10": 99.52,
+      "RSUM": NaN,
+      "MRR": NaN
+    },
+    "CLIP-L/14 final recall@32 (bound)": {
+      "R@1": NaN,
+      "R@5": NaN,
+      "R@10": 99.72,
+      "RSUM": NaN,
+      "MRR": NaN
+    },
+    "CLIP-L/14 final recall@64 (bound)": {
+      "R@1": NaN,
+      "R@5": NaN,
+      "R@10": 99.88,
+      "RSUM": NaN,
+      "MRR": NaN
+    },
+    "CLIP-L/14 final -> rerank ITM": {
+      "R@1": 89.94,
+      "R@5": 98.26,
+      "R@10": 99.24,
+      "RSUM": 287.44,
+      "MRR": 93.67599540906271
+    },
+    "CLIP-L/14 final -> rerank ITM+ITC": {
+      "R@1": 89.94,
+      "R@5": 98.26,
+      "R@10": 99.24,
+      "RSUM": 287.44,
+      "MRR": 93.67599540906271
+    },
+    "SigLIP-B final recall@16 (bound)": {
+      "R@1": NaN,
+      "R@5": NaN,
+      "R@10": 99.44,
+      "RSUM": NaN,
+      "MRR": NaN
+    },
+    "SigLIP-B final recall@32 (bound)": {
+      "R@1": NaN,
+      "R@5": NaN,
+      "R@10": 99.7,
+      "RSUM": NaN,
+      "MRR": NaN
+    },
+    "SigLIP-B final recall@64 (bound)": {
+      "R@1": NaN,
+      "R@5": NaN,
+      "R@10": 99.88,
+      "RSUM": NaN,
+      "MRR": NaN
+    },
+    "SigLIP-B final -> rerank ITM": {
+      "R@1": 89.82,
+      "R@5": 98.24000000000001,
+      "R@10": 98.98,
+      "RSUM": 287.04,
+      "MRR": 93.59649817468375
+    },
+    "SigLIP-B final -> rerank ITM+ITC": {
+      "R@1": 89.82,
+      "R@5": 98.24000000000001,
+      "R@10": 98.98,
+      "RSUM": 287.04,
+      "MRR": 93.59649817468375
+    },
+    "SigLIP2-SO400M final recall@16 (bound)": {
+      "R@1": NaN,
+      "R@5": NaN,
+      "R@10": 99.56,
+      "RSUM": NaN,
+      "MRR": NaN
+    },
+    "SigLIP2-SO400M final recall@32 (bound)": {
+      "R@1": NaN,
+      "R@5": NaN,
+      "R@10": 99.82,
+      "RSUM": NaN,
+      "MRR": NaN
+    },
+    "SigLIP2-SO400M final recall@64 (bound)": {
+      "R@1": NaN,
+      "R@5": NaN,
+      "R@10": 99.88,
+      "RSUM": NaN,
+      "MRR": NaN
+    },
+    "SigLIP2-SO400M final -> rerank ITM": {
+      "R@1": 90.0,
+      "R@5": 98.32,
+      "R@10": 99.32,
+      "RSUM": 287.64,
+      "MRR": 93.7504668583077
+    },
+    "SigLIP2-SO400M final -> rerank ITM+ITC": {
+      "R@1": 89.96,
+      "R@5": 98.32,
+      "R@10": 99.33999999999999,
+      "RSUM": 287.61999999999995,
+      "MRR": 93.73844832128918
+    },
+    "ensemble final recall@16 (bound)": {
+      "R@1": NaN,
+      "R@5": NaN,
+      "R@10": 99.52,
+      "RSUM": NaN,
+      "MRR": NaN
+    },
+    "ensemble final recall@32 (bound)": {
+      "R@1": NaN,
+      "R@5": NaN,
+      "R@10": 99.72,
+      "RSUM": NaN,
+      "MRR": NaN
+    },
+    "ensemble final recall@64 (bound)": {
+      "R@1": NaN,
+      "R@5": NaN,
+      "R@10": 99.86,
+      "RSUM": NaN,
+      "MRR": NaN
+    },
+    "ensemble final -> rerank ITM": {
+      "R@1": 90.03999999999999,
+      "R@5": 98.28,
+      "R@10": 99.32,
+      "RSUM": 287.64,
+      "MRR": 93.76066311296482
+    },
+    "ensemble final -> rerank ITM+ITC": {
+      "R@1": 90.03999999999999,
+      "R@5": 98.28,
+      "R@10": 99.32,
+      "RSUM": 287.64,
+      "MRR": 93.76066311296482
+    },
+    "CLIP-B/32 hybrid (v1) recall@16 (bound)": {
+      "R@1": NaN,
+      "R@5": NaN,
+      "R@10": 97.64,
+      "RSUM": NaN,
+      "MRR": NaN
+    },
+    "CLIP-B/32 hybrid (v1) recall@32 (bound)": {
+      "R@1": NaN,
+      "R@5": NaN,
+      "R@10": 98.82,
+      "RSUM": NaN,
+      "MRR": NaN
+    },
+    "CLIP-B/32 hybrid (v1) recall@64 (bound)": {
+      "R@1": NaN,
+      "R@5": NaN,
+      "R@10": 99.4,
+      "RSUM": NaN,
+      "MRR": NaN
+    },
+    "CLIP-B/32 hybrid (v1) -> rerank ITM": {
+      "R@1": 89.0,
+      "R@5": 98.0,
+      "R@10": 98.74000000000001,
+      "RSUM": 285.74,
+      "MRR": 93.0282355683796
+    },
+    "CLIP-B/32 hybrid (v1) -> rerank ITM+ITC": {
+      "R@1": 89.5,
+      "R@5": 98.04,
+      "R@10": 98.98,
+      "RSUM": 286.52000000000004,
+      "MRR": 93.3131946816614
+    },
+    "CLIP-B/32 hybrid (v1) -> rerank ITM top-16 (v1 protocol)": {
+      "R@1": 88.38000000000001,
+      "R@5": 96.92,
+      "R@10": 97.54,
+      "RSUM": 282.84000000000003,
+      "MRR": 92.27936635588067
+    },
+    "CLIP-L/14 hybrid (v1) recall@16 (bound)": {
+      "R@1": NaN,
+      "R@5": NaN,
+      "R@10": 98.04,
+      "RSUM": NaN,
+      "MRR": NaN
+    },
+    "CLIP-L/14 hybrid (v1) recall@32 (bound)": {
+      "R@1": NaN,
+      "R@5": NaN,
+      "R@10": 99.08,
+      "RSUM": NaN,
+      "MRR": NaN
+    },
+    "CLIP-L/14 hybrid (v1) recall@64 (bound)": {
+      "R@1": NaN,
+      "R@5": NaN,
+      "R@10": 99.6,
+      "RSUM": NaN,
+      "MRR": NaN
+    },
+    "CLIP-L/14 hybrid (v1) -> rerank ITM": {
+      "R@1": 88.86,
+      "R@5": 98.24000000000001,
+      "R@10": 99.03999999999999,
+      "RSUM": 286.14,
+      "MRR": 93.01572903354102
+    },
+    "CLIP-L/14 hybrid (v1) -> rerank ITM+ITC": {
+      "R@1": 89.24,
+      "R@5": 98.24000000000001,
+      "R@10": 99.11999999999999,
+      "RSUM": 286.6,
+      "MRR": 93.27489413052717
+    },
+    "CLIP-L/14 hybrid (v1) -> rerank ITM top-16 (v1 protocol)": {
+      "R@1": 88.36,
+      "R@5": 97.38,
+      "R@10": 97.94,
+      "RSUM": 283.68,
+      "MRR": 92.36585062753365
+    },
+    "SigLIP-B hybrid (v1) recall@16 (bound)": {
+      "R@1": NaN,
+      "R@5": NaN,
+      "R@10": 97.98,
+      "RSUM": NaN,
+      "MRR": NaN
+    },
+    "SigLIP-B hybrid (v1) recall@32 (bound)": {
+      "R@1": NaN,
+      "R@5": NaN,
+      "R@10": 99.02,
+      "RSUM": NaN,
+      "MRR": NaN
+    },
+    "SigLIP-B hybrid (v1) recall@64 (bound)": {
+      "R@1": NaN,
+      "R@5": NaN,
+      "R@10": 99.5,
+      "RSUM": NaN,
+      "MRR": NaN
+    },
+    "SigLIP-B hybrid (v1) -> rerank ITM": {
+      "R@1": 88.82,
+      "R@5": 98.02,
+      "R@10": 98.83999999999999,
+      "RSUM": 285.67999999999995,
+      "MRR": 92.94180012373943
+    },
+    "SigLIP-B hybrid (v1) -> rerank ITM+ITC": {
+      "R@1": 89.22,
+      "R@5": 98.18,
+      "R@10": 99.02,
+      "RSUM": 286.42,
+      "MRR": 93.22971971967013
+    },
+    "SigLIP-B hybrid (v1) -> rerank ITM top-16 (v1 protocol)": {
+      "R@1": 88.3,
+      "R@5": 97.26,
+      "R@10": 97.84,
+      "RSUM": 283.4,
+      "MRR": 92.35610765682617
+    },
+    "SigLIP2-SO400M hybrid (v1) recall@16 (bound)": {
+      "R@1": NaN,
+      "R@5": NaN,
+      "R@10": 98.78,
+      "RSUM": NaN,
+      "MRR": NaN
+    },
+    "SigLIP2-SO400M hybrid (v1) recall@32 (bound)": {
+      "R@1": NaN,
+      "R@5": NaN,
+      "R@10": 99.52,
+      "RSUM": NaN,
+      "MRR": NaN
+    },
+    "SigLIP2-SO400M hybrid (v1) recall@64 (bound)": {
+      "R@1": NaN,
+      "R@5": NaN,
+      "R@10": 99.8,
+      "RSUM": NaN,
+      "MRR": NaN
+    },
+    "SigLIP2-SO400M hybrid (v1) -> rerank ITM": {
+      "R@1": 89.75999999999999,
+      "R@5": 98.36,
+      "R@10": 99.16,
+      "RSUM": 287.28,
+      "MRR": 93.57622637085434
+    },
+    "SigLIP2-SO400M hybrid (v1) -> rerank ITM+ITC": {
+      "R@1": 89.72,
+      "R@5": 98.28,
+      "R@10": 99.32,
+      "RSUM": 287.32,
+      "MRR": 93.56726713181546
+    },
+    "SigLIP2-SO400M hybrid (v1) -> rerank ITM top-16 (v1 protocol)": {
+      "R@1": 90.03999999999999,
+      "R@5": 97.98,
+      "R@10": 98.68,
+      "RSUM": 286.7,
+      "MRR": 93.57767686570584
+    },
+    "BLIP-2 protocol (ITC top-128 -> ITM logit + ITC)": {
+      "R@1": 89.44,
+      "R@5": 98.08,
+      "R@10": 98.92,
+      "RSUM": 286.44,
+      "MRR": 93.31049354286246
+    },
+    "ensemble final -> v2 stage 2 (recomputed)": {
+      "R@1": 90.03999999999999,
+      "R@5": 98.28,
+      "R@10": 99.32,
+      "RSUM": 287.64,
+      "MRR": 93.76066311296482
+    },
+    "ensemble final -> + blip-itm-large-coco": {
+      "R@1": 90.02,
+      "R@5": 98.3,
+      "R@10": 99.36,
+      "RSUM": 287.68,
+      "MRR": 93.75055577206393
+    },
+    "v3 (zero-shot protocol): + VLM Qwen2.5-VL-7B-Instruct": {
+      "R@1": 90.4,
+      "R@5": 98.54,
+      "R@10": 99.36,
+      "RSUM": 288.3,
+      "MRR": 94.04157958158773
+    },
+    "ensemble final -> + blip-itm-large-flickr [FT on flickr1k]": {
+      "R@1": 89.86,
+      "R@5": 98.36,
+      "R@10": 99.38,
+      "RSUM": 287.6,
+      "MRR": 93.65610597779312
+    },
+    "v3 (FT protocol): + VLM Qwen2.5-VL-7B-Instruct": {
+      "R@1": 90.3,
+      "R@5": 98.46000000000001,
+      "R@10": 99.38,
+      "RSUM": 288.14,
+      "MRR": 93.978748834936
+    }
+  },
+  "picked": {
+    "CLIP-B/32": [
+      {
+        "alpha": 0.8,
+        "w": 0.4,
+        "tags": 0.0,
+        "regions": 0.2,
+        "itc": 0.5,
+        "hub": [
+          10.0,
+          0.0
+        ]
+      },
+      {
+        "alpha": 0.9,
+        "w": 0.5,
+        "tags": 0.0,
+        "regions": 0.2,
+        "itc": 0.6,
+        "hub": [
+          10.0,
+          0.0
+        ]
+      }
+    ],
+    "CLIP-L/14": [
+      {
+        "alpha": 0.8,
+        "w": 0.3,
+        "tags": 0.0,
+        "regions": 0.3,
+        "itc": 0.6,
+        "hub": [
+          50.0,
+          0.25
+        ]
+      },
+      {
+        "alpha": 0.85,
+        "w": 0.4,
+        "tags": 0.0,
+        "regions": 0.3,
+        "itc": 0.5,
+        "hub": [
+          10.0,
+          0.0
+        ]
+      }
+    ],
+    "SigLIP-B": [
+      {
+        "alpha": 0.85,
+        "w": 0.2,
+        "tags": 0.0,
+        "regions": 0.4,
+        "itc": 0.5,
+        "hub": [
+          10.0,
+          0.0
+        ]
+      },
+      {
+        "alpha": 0.9,
+        "w": 0.3,
+        "tags": 0.0,
+        "regions": 0.4,
+        "itc": 0.5,
+        "hub": [
+          10.0,
+          0.0
+        ]
+      }
+    ],
+    "SigLIP2-SO400M": [
+      {
+        "alpha": 0.9,
+        "w": 0.3,
+        "tags": 0.0,
+        "regions": 0.3,
+        "itc": 0.4,
+        "hub": [
+          10.0,
+          0.0
+        ]
+      },
+      {
+        "alpha": 1.0,
+        "w": 0.3,
+        "tags": 0.0,
+        "regions": 0.2,
+        "itc": 0.4,
+        "hub": [
+          10.0,
+          0.25
+        ]
+      }
+    ]
+  },
+  "live_flat_weights_suggestion": {
+    "CLIP-B/32": [
+      {
+        "fused": 0.24,
+        "te_caption": 0.16000000000000003,
+        "te_tags": 0.0,
+        "region": 0.1,
+        "itc": 0.5
+      },
+      {
+        "fused": 0.16000000000000003,
+        "te_caption": 0.16000000000000003,
+        "te_tags": 0.0,
+        "region": 0.08000000000000002,
+        "itc": 0.6
+      }
+    ],
+    "CLIP-L/14": [
+      {
+        "fused": 0.19599999999999998,
+        "te_caption": 0.084,
+        "te_tags": 0.0,
+        "region": 0.12,
+        "itc": 0.6
+      },
+      {
+        "fused": 0.21,
+        "te_caption": 0.13999999999999999,
+        "te_tags": 0.0,
+        "region": 0.15,
+        "itc": 0.5
+      }
+    ],
+    "SigLIP-B": [
+      {
+        "fused": 0.24,
+        "te_caption": 0.06,
+        "te_tags": 0.0,
+        "region": 0.2,
+        "itc": 0.5
+      },
+      {
+        "fused": 0.21,
+        "te_caption": 0.09,
+        "te_tags": 0.0,
+        "region": 0.2,
+        "itc": 0.5
+      }
+    ],
+    "SigLIP2-SO400M": [
+      {
+        "fused": 0.29399999999999993,
+        "te_caption": 0.126,
+        "te_tags": 0.0,
+        "region": 0.18,
+        "itc": 0.4
+      },
+      {
+        "fused": 0.33599999999999997,
+        "te_caption": 0.144,
+        "te_tags": 0.0,
+        "region": 0.12,
+        "itc": 0.4
+      }
+    ]
+  },
+  "rerank_picks": {
+    "CLIP-B/32 final -> rerank ITM": [
+      [
+        32,
+        0.5
+      ],
+      [
+        32,
+        0.7
+      ]
+    ],
+    "CLIP-B/32 final -> rerank ITM+ITC": [
+      [
+        32,
+        [
+          0.5,
+          0.0
+        ]
+      ],
+      [
+        32,
+        [
+          0.7,
+          0.0
+        ]
+      ]
+    ],
+    "CLIP-L/14 final -> rerank ITM": [
+      [
+        16,
+        0.6
+      ],
+      [
+        16,
+        0.6
+      ]
+    ],
+    "CLIP-L/14 final -> rerank ITM+ITC": [
+      [
+        16,
+        [
+          0.6,
+          0.0
+        ]
+      ],
+      [
+        16,
+        [
+          0.6,
+          0.0
+        ]
+      ]
+    ],
+    "SigLIP-B final -> rerank ITM": [
+      [
+        16,
+        0.8
+      ],
+      [
+        32,
+        0.9
+      ]
+    ],
+    "SigLIP-B final -> rerank ITM+ITC": [
+      [
+        16,
+        [
+          0.8,
+          0.0
+        ]
+      ],
+      [
+        32,
+        [
+          0.9,
+          0.0
+        ]
+      ]
+    ],
+    "SigLIP2-SO400M final -> rerank ITM": [
+      [
+        16,
+        0.8
+      ],
+      [
+        16,
+        0.6
+      ]
+    ],
+    "SigLIP2-SO400M final -> rerank ITM+ITC": [
+      [
+        16,
+        [
+          0.7,
+          0.1
+        ]
+      ],
+      [
+        16,
+        [
+          0.6,
+          0.0
+        ]
+      ]
+    ],
+    "ensemble final -> rerank ITM": [
+      [
+        32,
+        0.3
+      ],
+      [
+        64,
+        0.4
+      ]
+    ],
+    "ensemble final -> rerank ITM+ITC": [
+      [
+        32,
+        [
+          0.3,
+          0.0
+        ]
+      ],
+      [
+        64,
+        [
+          0.4,
+          0.0
+        ]
+      ]
+    ],
+    "CLIP-B/32 hybrid (v1) -> rerank ITM": [
+      [
+        64,
+        1.0
+      ],
+      [
+        64,
+        0.9
+      ]
+    ],
+    "CLIP-B/32 hybrid (v1) -> rerank ITM+ITC": [
+      [
+        64,
+        [
+          0.3,
+          0.5
+        ]
+      ],
+      [
+        64,
+        [
+          0.4,
+          0.4
+        ]
+      ]
+    ],
+    "CLIP-L/14 hybrid (v1) -> rerank ITM": [
+      [
+        64,
+        1.0
+      ],
+      [
+        64,
+        0.8
+      ]
+    ],
+    "CLIP-L/14 hybrid (v1) -> rerank ITM+ITC": [
+      [
+        64,
+        [
+          0.4,
+          0.5
+        ]
+      ],
+      [
+        64,
+        [
+          0.3,
+          0.5
+        ]
+      ]
+    ],
+    "SigLIP-B hybrid (v1) -> rerank ITM": [
+      [
+        64,
+        1.0
+      ],
+      [
+        64,
+        0.8
+      ]
+    ],
+    "SigLIP-B hybrid (v1) -> rerank ITM+ITC": [
+      [
+        64,
+        [
+          0.5,
+          0.4
+        ]
+      ],
+      [
+        64,
+        [
+          0.4,
+          0.4
+        ]
+      ]
+    ],
+    "SigLIP2-SO400M hybrid (v1) -> rerank ITM": [
+      [
+        64,
+        0.8
+      ],
+      [
+        64,
+        0.7
+      ]
+    ],
+    "SigLIP2-SO400M hybrid (v1) -> rerank ITM+ITC": [
+      [
+        64,
+        [
+          0.4,
+          0.4
+        ]
+      ],
+      [
+        64,
+        [
+          0.3,
+          0.3
+        ]
+      ]
+    ]
+  },
+  "significance": {
+    "ensemble final -> rerank ITM+ITC vs CLIP-B/32 hybrid (v1) -> rerank ITM top-16 (v1 protocol)": {
+      "delta_R@1": 1.66,
+      "ci_lo": 1.0995,
+      "ci_hi": 2.2800000000000002,
+      "p": 0.0
+    },
+    "ensemble final -> rerank ITM+ITC vs CLIP-L/14 hybrid (v1) -> rerank ITM top-16 (v1 protocol)": {
+      "delta_R@1": 1.68,
+      "ci_lo": 1.1195,
+      "ci_hi": 2.2800000000000002,
+      "p": 0.0
+    },
+    "ensemble final -> rerank ITM+ITC vs SigLIP-B hybrid (v1) -> rerank ITM top-16 (v1 protocol)": {
+      "delta_R@1": 1.7399999999999998,
+      "ci_lo": 1.1400000000000001,
+      "ci_hi": 2.34,
+      "p": 0.0
+    },
+    "ensemble final -> rerank ITM+ITC vs SigLIP2-SO400M hybrid (v1) -> rerank ITM top-16 (v1 protocol)": {
+      "delta_R@1": 0.0,
+      "ci_lo": -0.5599999999999999,
+      "ci_hi": 0.5404999999999973,
+      "p": 0.994
+    },
+    "ensemble final -> rerank ITM+ITC vs BLIP-2 protocol (ITC top-128 -> ITM logit + ITC)": {
+      "delta_R@1": 0.6,
+      "ci_lo": -0.0004999999999999716,
+      "ci_hi": 1.2,
+      "p": 0.057
+    },
+    "v3 (zero-shot protocol): + VLM Qwen2.5-VL-7B-Instruct vs ensemble final -> rerank ITM+ITC": {
+      "delta_R@1": 0.36,
+      "ci_lo": -0.13999999999999999,
+      "ci_hi": 0.86,
+      "p": 0.154
+    },
+    "v3 (zero-shot protocol): + VLM Qwen2.5-VL-7B-Instruct vs BLIP-2 protocol (ITC top-128 -> ITM logit + ITC)": {
+      "delta_R@1": 0.96,
+      "ci_lo": 0.32,
+      "ci_hi": 1.6199999999999999,
+      "p": 0.003
+    },
+    "v3 (FT protocol): + VLM Qwen2.5-VL-7B-Instruct vs ensemble final -> rerank ITM+ITC": {
+      "delta_R@1": 0.26,
+      "ci_lo": -0.24,
+      "ci_hi": 0.76,
+      "p": 0.321
+    },
+    "v3 (FT protocol): + VLM Qwen2.5-VL-7B-Instruct vs BLIP-2 protocol (ITC top-128 -> ITM logit + ITC)": {
+      "delta_R@1": 0.86,
+      "ci_lo": 0.24,
+      "ci_hi": 1.48,
+      "p": 0.006
+    }
+  },
+  "v3": {
+    "zero_shot": [
+      {
+        "K": 32,
+        "lam": [
+          0.3,
+          0.0
+        ],
+        "x0": 0.0,
+        "M": 8,
+        "gv": 0.3
+      },
+      {
+        "K": 64,
+        "lam": [
+          0.4,
+          0.0
+        ],
+        "x0": 0.2,
+        "M": 8,
+        "gv": 0.3
+      }
+    ],
+    "ft": [
+      {
+        "K": 32,
+        "lam": [
+          0.3,
+          0.0
+        ],
+        "x0": 0.0,
+        "x1": 0.0,
+        "M": 8,
+        "gv": 0.3
+      },
+      {
+        "K": 64,
+        "lam": [
+          0.4,
+          0.0
+        ],
+        "x0": 0.2,
+        "x1": 0.1,
+        "M": 8,
+        "gv": 0.3
+      }
+    ],
+    "chain": "ensemble final",
+    "models": {
+      "extra": [
+        "Salesforce/blip-itm-large-coco"
+      ],
+      "ft": [
+        "Salesforce/blip-itm-large-flickr"
+      ],
+      "vlm": "Qwen/Qwen2.5-VL-7B-Instruct"
+    }
+  },
+  "runtime_min": 89.92620785236359
+}
