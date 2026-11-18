@@ -15,8 +15,8 @@ OUT.mkdir(parents=True, exist_ok=True)
 
 ENCODERS = [("clip-vit-base-patch32", "CLIP ViT-B/32"), ("clip-vit-large-patch14", "CLIP ViT-L/14"),
             ("siglip-base-patch16-224", "SigLIP B/16")]
-COLORS = ["#2a78d6", "#eb6834", "#1baf7a"]
-MARKERS = ["o", "s", "^"]
+COLORS = ["#2a78d6", "#eb6834", "#1baf7a", "#8e44ad"]
+MARKERS = ["o", "s", "^", "D"]
 INK, INK2, GRID = "#0b0b0b", "#52514e", "#e4e3df"
 
 plt.rcParams.update({"font.family": "serif", "font.size": 8, "axes.edgecolor": INK2, "axes.labelcolor": INK,
@@ -90,8 +90,63 @@ def fig_qualitative():
     fig.savefig(OUT / "qualitative.pdf", dpi=200)
 
 
+V2_SHORT = [("CLIP-B/32", "CLIP ViT-B/32"), ("CLIP-L/14", "CLIP ViT-L/14"), ("SigLIP-B", "SigLIP B/16"),
+            ("SigLIP2-SO400M", "SigLIP2 So400m")]
+
+
+def fig_v2(dataset="flickr1k", tag=""):
+    """T->I R@1 along the v2 chain, per encoder, with the reproduced and published BLIP-2 levels (and v3 if present)."""
+    path = ROOT / f"results/json/{dataset}_v2{tag}.json"
+    if not path.exists():
+        print(f"skip v2 figure: {path.name} not found")
+        return
+    m = json.loads(path.read_text(encoding="utf-8"))["metrics"]
+    steps = [("image", "Image\nonly"), ("hybrid (v1)", "Hybrid\n(v1)"), ("+tags", "+obj.\ntags"),
+             ("+regions", "+regions"), ("+itc", "+BLIP-2\nITC"), ("+hub (CB-Norm)", "+CB-\nNorm"),
+             ("final -> rerank ITM+ITC", "+BLIP-2\nrerank")]
+    fig, ax = plt.subplots(figsize=(3.45, 2.45))
+    x = list(range(len(steps)))
+    for (short, label), c, mk in zip(V2_SHORT, COLORS, MARKERS):
+        xs, ys = [], []
+        for i, (key, _) in enumerate(steps):
+            k = f"{short} {key}"
+            if k in m and m[k]["R@1"] == m[k]["R@1"]:
+                xs.append(i)
+                ys.append(m[k]["R@1"])
+        if ys:
+            ax.plot(xs, ys, color=c, lw=2, marker=mk, ms=5, mec="white", mew=1, label=label, zorder=3)
+    ens = [k for k in m if k.startswith("ensemble final -> rerank ITM+ITC")]
+    if ens:
+        ax.scatter([len(steps) - 1], [m[ens[0]]["R@1"]], marker="*", s=90, color=INK, zorder=4,
+                   label=f"Ensemble ({m[ens[0]]['R@1']:.1f})")
+    v3 = [(k, lab, mk) for prefix, lab, mk in (("v3 (zero-shot protocol)", "v3 zero-shot", "P"), ("v3 (FT protocol)", "v3 FT", "X"))
+          for k in m if k.startswith(prefix)]
+    if v3:
+        steps = steps + [("v3", "+cross-enc.\nens. + VLM")]
+        x = list(range(len(steps)))
+        for k, lab, mk in v3:
+            ax.scatter([len(steps) - 1], [m[k]["R@1"]], marker=mk, s=70, color=INK, zorder=4,
+                       label=f"{lab} ({m[k]['R@1']:.1f})")
+    nat = [k for k in m if k.startswith("BLIP-2 protocol")]
+    published = {"flickr1k": (89.7, "BLIP-2 ZS (paper)"), "coco5k": (68.3, "BLIP-2 fine-tuned on COCO (paper)")}[dataset]
+    refs = [(*published, ":")] + ([(m[nat[0]]["R@1"], "BLIP-2 protocol (reproduced)", "--")] if nat else [])
+    for i, (v, lab, ls) in enumerate(refs):   # first label above its line, second below, so they never overlap
+        ax.axhline(v, color=INK2, lw=0.8, ls=ls, zorder=1)
+        ax.annotate(f"{lab} {v:.1f}", (0, v), xytext=(0, 2 if i == 0 else -2), textcoords="offset points",
+                    va="bottom" if i == 0 else "top", fontsize=5.5, color=INK2)
+    ax.set_xticks(x, [s[1] for s in steps], fontsize=5.5)
+    ax.set_ylabel("Text→Image R@1 (%)")
+    ax.grid(axis="y", color=GRID, lw=0.6, zorder=0)
+    ax.legend(frameon=False, fontsize=6, loc="lower right")
+    fig.tight_layout(pad=0.3)
+    fig.savefig(OUT / f"v2_stages_{dataset}{tag}.pdf")
+
+
 if __name__ == "__main__":
-    fig_stages()
-    fig_alpha()
-    fig_qualitative()
+    for fn in (fig_stages, fig_alpha, fig_qualitative, fig_v2, lambda: fig_v2("coco5k"),
+               lambda: fig_v2("flickr1k", "_v3"), lambda: fig_v2("coco5k", "_v3")):
+        try:
+            fn()
+        except Exception as e:   # a missing input file should not block the other figures
+            print(f"figure {getattr(fn, '__name__', fn)} skipped: {e}")
     print("figures:", sorted(p.name for p in OUT.iterdir()))
