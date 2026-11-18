@@ -23,22 +23,27 @@ from mmrag.pipeline import load_retriever
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--store", required=True)
+    ap.add_argument("--config", default=None, help="extra YAML merged over configs/default.yaml")
     ap.add_argument("--n", type=int, default=1000, help="number of queries (random sample, fixed seed); 0 = all 5000")
     ap.add_argument("--strategies", default="image,fused,hybrid", help="first-stage strategies to measure")
     ap.add_argument("--sleep", type=float, default=None, help="override throttle.gpu_sleep_s")
     ap.add_argument("--reranker", default=None, help="override reranker.name (e.g. Salesforce/blip2-itm-vit-g-coco)")
     ap.add_argument("--weight", type=float, default=None, help="override reranker.weight (lambda)")
     ap.add_argument("--dataset", choices=["flickr1k", "coco5k"], default="flickr1k")
+    ap.add_argument("--rerank-strategy", default="hybrid", help="first stage under the reranker ('full' for v2 stores)")
+    ap.add_argument("--rerank-k", type=int, default=None, help="override reranker.top_k")
+    ap.add_argument("--itc-weight", type=float, default=None, help="override reranker.itc_weight (BLIP-2 ITC in stage 2)")
     ap.add_argument("--suffix", default="", help="appended to the output file name, e.g. _blip2")
     args = ap.parse_args()
 
     over = {}
     if args.sleep is not None:
         over["throttle"] = {"gpu_sleep_s": args.sleep}
-    rr = {k: v for k, v in (("name", args.reranker), ("weight", args.weight)) if v is not None}
+    rr = {k: v for k, v in (("name", args.reranker), ("weight", args.weight), ("top_k", args.rerank_k),
+                            ("itc_weight", args.itc_weight)) if v is not None}
     if rr:
         over["reranker"] = rr
-    cfg = load_config(overrides=over or None)
+    cfg = load_config(args.config, overrides=over or None)
     retriever = load_retriever(args.store, cfg, rerank=True)
     store = retriever.store
     print(store)
@@ -50,7 +55,7 @@ def main():
     if args.n and args.n < len(queries):
         qidx = np.sort(np.random.default_rng(0).choice(len(queries), args.n, replace=False))
 
-    runs = [(s, False) for s in args.strategies.split(",") if s] + [("hybrid", True)]
+    runs = [(s, False) for s in args.strategies.split(",") if s] + [(args.rerank_strategy, True)]
     results = {}
     for strategy, rerank in runs:
         name = f"{strategy}+rerank" if rerank else strategy
@@ -68,7 +73,8 @@ def main():
     tag = resolve(args.store).name
     lines = [f"Online search on `{tag}`, {len(qidx)} text queries (seed 0), "
              f"alpha={store.alpha}, text_weight={cfg['fusion']['text_weight']}, "
-             f"rerank {cfg['reranker']['name']} top_k={cfg['reranker']['top_k']} weight={cfg['reranker']['weight']}, "
+             f"rerank {cfg['reranker']['name']} top_k={cfg['reranker']['top_k']} weight={cfg['reranker']['weight']} "
+             f"itc_weight={cfg['reranker'].get('itc_weight', 0.0)}, hub_rho={cfg['fusion'].get('hub_rho', 0.0)}, "
              f"gpu_sleep_s={cfg['throttle']['gpu_sleep_s']}", "",
              "| strategy | R@1 | R@5 | R@10 | MRR@10 | ms/query |", "|---|---:|---:|---:|---:|---:|"]
     for name, m in results.items():
@@ -85,5 +91,7 @@ def main():
 
 if __name__ == "__main__":
     import os
+    import sys
     main()
+    sys.stdout.flush()
     os._exit(0)

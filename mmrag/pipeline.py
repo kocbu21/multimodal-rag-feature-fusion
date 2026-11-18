@@ -10,7 +10,8 @@ from .vector_store import UnifiedVectorStore
 
 def load_retriever(store_dir: str, cfg: dict, rerank: bool | None = None) -> MultimodalRetriever:
     store = UnifiedVectorStore.load(resolve(store_dir), alpha=cfg["fusion"]["alpha"],
-                                    center=cfg["fusion"]["center_modalities"])
+                                    center=cfg["fusion"]["center_modalities"],
+                                    hub_beta=cfg["fusion"].get("hub_beta", 0.0) if cfg["fusion"].get("hub_rho", 0.0) else 0.0)
     cfg["encoder"]["name"] = store.encoder_name
     sleep_s = cfg.get("throttle", {}).get("gpu_sleep_s", 0.0)
     device = cfg["encoder"].get("device", "cuda")
@@ -27,4 +28,16 @@ def load_retriever(store_dir: str, cfg: dict, rerank: bool | None = None) -> Mul
         reranker = ITMReranker(cfg["reranker"]["name"], device, sleep_s=sleep_s)
         cfg["reranker"]["enabled"] = True
 
-    return MultimodalRetriever(store, build_encoder(cfg), cfg, text_embedder=text_embedder, reranker=reranker)
+    extra, vlm = [], None
+    if use_rr:
+        from .reranker import ITMReranker
+        for e in cfg["reranker"].get("extra") or []:
+            if e.get("weight", 0):
+                extra.append((ITMReranker(e["name"], device, sleep_s=sleep_s), float(e["weight"])))
+        v = cfg["reranker"].get("vlm") or {}
+        if v.get("name") and v.get("weight", 0):
+            from .vlm_scorer import VLMScorer
+            vlm = (VLMScorer(v["name"], device, sleep_s=sleep_s), int(v.get("top_m", 8)), float(v["weight"]))
+
+    return MultimodalRetriever(store, build_encoder(cfg), cfg, text_embedder=text_embedder, reranker=reranker,
+                               extra_rerankers=extra, vlm=vlm)
