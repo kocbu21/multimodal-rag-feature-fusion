@@ -4,8 +4,8 @@ Examples
 --------
 python scripts/build_index.py --source raw
 python scripts/build_index.py --source flickr1k --encoder google/siglip-base-patch16-224
-python scripts/build_index.py --source flickr1k --text-embedder --v2            # + regions, tags, BLIP-2 ITC, bank
-python scripts/build_index.py --upgrade indexes/flickr1k_multi_siglip-base-patch16-224   # add v2 vectors in place
+python scripts/build_index.py --source flickr1k --text-embedder --v2
+python scripts/build_index.py --upgrade indexes/flickr1k_multi_siglip-base-patch16-224
 """
 
 import argparse

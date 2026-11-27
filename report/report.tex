@@ -696,10 +696,19 @@ and 0.4), where the candidates are harder to order. VLM verification helps on bo
 not improve on the zero-shot v3 (90.30 vs.\ 90.40), so we use no Flickr30k training data in the main system.
 
 \emph{Significance.} On Flickr30k, v3 is 0.96 R@1 above BLIP-2's own protocol re-run in our code (95\% CI [0.32,
-1.62], $p=0.003$); the 4-encoder stage before the VLM was already 0.60 ahead (CI [0.00, 1.20], $p=0.06$). The VLM
-step alone adds 0.36 on Flickr30k, which is not significant (CI [$-0.14$, 0.86]), and 0.88 R@1 over the 4-encoder
-v2 stage on COCO, which is (CI [0.58, 1.19]). Against v1, v3 gains 2.0 R@1 on Flickr30k and 3.3 on COCO (CLIP B/32
-first stage).
+1.62], $p=0.003$); the 4-encoder stage before the two v3 stage-2 steps was already 0.60 ahead (CI [0.00, 1.20],
+$p=0.06$). Those two steps \emph{together} (BLIP ITM-large and VLM verification), measured against the 4-encoder
+ensemble with BLIP-2, add 0.36 R@1 on Flickr30k, which is not significant (CI [$-0.14$, 0.86]), and 0.88 R@1 on
+COCO, which is (CI [0.58, 1.19]). We did not run a separate significance test for the VLM step; its increments
+over the preceding row of Table~\ref{tab:v3} are +0.38 and +0.61. Against v1, v3 gains 2.0 R@1 on Flickr30k and 3.3
+on COCO (CLIP B/32 first stage).
+
+\emph{A simpler baseline with SigLIP~2.} Replacing the v1 encoder by SigLIP~2 and keeping the v1 protocol
+(hybrid first stage, BLIP-2 on the top-16) already gives 90.04 / 97.98 / 98.68 on Flickr30k. At R@1 this equals
+the 4-encoder ensemble with BLIP-2 (90.04; difference 0.00, CI [$-0.56$, 0.54], $p=0.99$), so on Flickr30k the
+ensemble and the larger candidate pool improve R@5 and R@10 (98.28 / 99.32) but not R@1 over this baseline; v3 is
+0.36 R@1 above it (not tested for significance). On COCO the ensemble does help at R@1: the same baseline gives
+67.26 / 85.10 / 88.64, 1.00 R@1 below the ensemble (CI [0.70, 1.28]).
 
 \emph{Cost.} The VLM scored 43K pairs on Flickr30k and 110K on COCO at 12--18 pairs/s. In the live system
 (SigLIP2 So400m store, 1000 queries, settings from the CV picks) v3 reaches 90.4 R@1, 98.3 R@5 and 99.2 R@10 at
@@ -1034,8 +1043,9 @@ crops did not help on either benchmark. Improving the reranker itself, rather th
 the most promising next step, and v3 confirms it: a stronger fourth encoder, a second cross-encoder and a VLM that
 verifies only the top candidates raise R@1 to 90.4 on Flickr30k 1K, significantly above BLIP-2's protocol in the
 same code and level with the best fine-tuned model we compare with, and to 69.1 on COCO 5K, without training any
-model. The VLM step is the most expensive per point of accuracy, so the cascade can stop after the cross-encoders
-when latency matters.
+model. On Flickr30k, much of the R@1 level is already reached by the simpler v1 protocol with a SigLIP~2 encoder
+(90.04), whereas on COCO the full system is clearly ahead of that baseline (69.1 vs.\ 67.3). The VLM step is the
+most expensive per point of accuracy, so the cascade can stop after the cross-encoders when latency matters.
 
 \begin{thebibliography}{00}
 \bibitem{lewis2020rag} P. Lewis \emph{et al.}, ``Retrieval-augmented generation for knowledge-intensive NLP
