@@ -58,7 +58,11 @@ by cross-validation. On Flickr30k 1K, v2 reaches 89.7 T\RA I R@1, 98.4 R@5 and 9
 (95\% CI [0.7, 1.9]); this is on par with BLIP-2's own retrieval protocol re-run in the same code (89.4; the
 difference is not significant) and with the 89.7 reported in the BLIP-2 paper, while R@5 and R@10 are higher. On all
 25{,}010 COCO 5K queries v2 reaches 68.2 / 87.8 / 92.8, +1.0 to +2.4 R@1 over v1, at the level reported for BLIP-2
-fine-tuned on COCO. The retrieved images are passed to a vision-language model that answers questions
+fine-tuned on COCO. Since almost all remaining errors are ordering errors of the reranker, a third version (v3) adds
+a SigLIP~2 encoder, a second cross-encoder and a VQAScore-style verification of the top candidates by Qwen2.5-VL.
+v3 reaches 90.4 / 98.5 / 99.4 on Flickr30k, 0.96 R@1 above BLIP-2's protocol re-run in our code (95\% CI [0.3,
+1.6]) and level with BEiT-3 fine-tuned on Flickr30k (90.3), and 69.1 / 88.2 / 93.1 on COCO 5K, above the published
+BLIP-2 and BEiT-3 COCO results; the verification step costs about 0.6\,s per query. The retrieved images are passed to a vision-language model that answers questions
 with source citations.
 \end{abstract}
 
@@ -99,6 +103,9 @@ ensembling, and \emph{caption-bank hubness normalisation} (CB-Norm), which corre
 gallery's own generated captions instead of training or test queries. Every component is selected or switched off
 by cross-validation, its contribution is measured in an ablation, and the final system is compared with v1 and with
 BLIP-2's retrieval protocol, re-run in the same code, using paired bootstrap confidence intervals.
+\item A third version (v3) that targets the remaining ordering errors with a fourth dual encoder (SigLIP~2), a
+cross-encoder ensemble and a VLM verification cascade, reaching 90.4 R@1 on Flickr30k 1K without Flickr30k
+training (significantly above BLIP-2's protocol re-run in our code) and 69.1 on COCO 5K.
 \end{itemize}
 
 \section{Related Work}
@@ -132,6 +139,10 @@ normalisation (QB-Norm)~\cite{bogolin2022qbnorm} rescale each gallery item by it
 queries, which QB-Norm takes from the training set. Dual softmax~\cite{cheng2021camoe} normalises over the test
 queries themselves and is therefore transductive. Our CB-Norm builds the bank from generated captions of the
 gallery, so it needs neither training queries nor test queries.
+
+\textbf{VLMs as matchers.} VQAScore~\cite{lin2024vqascore} scores image--text alignment by the probability
+that a VLM answers ``Yes'' to a question built from the text, and outperforms contrastive scores on compositional
+prompts. We use the same scoring with an off-the-shelf VLM as the last stage of a retrieval cascade.
 
 \textbf{Multimodal RAG.} MuRAG~\cite{chen2022murag} retrieves images and text for open question
 answering. Our work focuses on the retrieval step and shows how much it can be improved without
@@ -306,6 +317,33 @@ s = \lambda_1 z(p_\mathrm{ITM}) + \lambda_2 z(s_\mathrm{itc}) + (1-\lambda_1-\la
 where $(K,\lambda_1,\lambda_2)$ with $K\in\{16,32,64\}$ and $\lambda_1+\lambda_2\le 1$ is chosen by CV, so a
 larger pool is used only if it helps on held-out queries. For reference we also re-run BLIP-2's own retrieval
 protocol~\cite{li2023blip2} in our code: ITC top-128, then ITM logit plus ITC similarity.
+
+\subsection{Version 3: Strengthening the Ordering of the Candidates}
+\label{sec:v3}
+After v2 the first stage almost always contains the correct image (recall@64 99.9\% on Flickr30k), and the
+remaining errors are made when the candidates are ordered (Section~\ref{sec:v2res}). v3 therefore spends its extra
+compute on the ordering, in three steps that are again added greedily with CV weights that may be zero.
+
+\textbf{Fourth dual encoder.} SigLIP~2 So400m/14 at 384\,px~\cite{tschannen2025siglip2} joins the encoder ensemble.
+Since on Flickr30k the stage-1 score keeps a weight of 0.6--0.7 in the final combination (Eq.~\ref{eq:rerank2}), a
+better stage-1 score also improves the ordering, not only the recall.
+
+\textbf{Cross-encoder ensemble.} A second cross-encoder, BLIP ITM-large fine-tuned on COCO~\cite{li2022blip}, is
+mixed into the stage-2 score, $s\leftarrow(1-\gamma)z(s)+\gamma\,z(p_\mathrm{BLIP\text{-}L})$; different
+cross-encoders make different ordering mistakes.
+
+\textbf{VLM verification of the top-$M$.} An instruction-tuned VLM, Qwen2.5-VL-7B~\cite{bai2025qwen25vl}, is asked
+whether each of the top-$M$ candidates matches the query (``Does this image match the following description? \dots\
+Answer with Yes or No.'') and scored, as in VQAScore~\cite{lin2024vqascore}, by the log-odds of its first output
+token, $v=\log P(\text{Yes})-\log P(\text{No})$, without generating text. The top-$M$ are reordered by
+$(1-\gamma_v)z(s)+\gamma_v z(v)$ and stay above the other candidates; $M\in\{4,8\}$ and $\gamma_v$ are chosen by CV.
+The VLM reads the whole query with a 7B language model and can check counts, attributes and relations, but it costs
+about 0.06--0.08\,s per pair on an A100, so it is used only as the last step of a cascade. Images are resized to at
+most $448\times448$ pixels (at most 256 visual tokens).
+
+\textbf{FT variant (Flickr30k only).} To compare with models fine-tuned on Flickr30k under their own protocol, we
+also report a variant that adds BLIP ITM-large fine-tuned on the Flickr30k training split~\cite{li2022blip}. It is
+labelled FT and kept apart from the main, zero-shot results.
 
 \subsection{Answer Generation}
 The top results (images with their captions, and text documents) are sent to a vision-language model
@@ -611,12 +649,71 @@ R@1 to 81.96 with the fixed temperature we used; we did not tune it on the test 
 
 \begin{figure}[t]
 \centering
-\includegraphics[width=\columnwidth]{figures/v2_stages_flickr1k.pdf}
-\caption{T\RA I R@1 along the v2 chain on Flickr30k 1K (CV weights; ``off'' components keep the previous value).
-Dotted: BLIP-2 zero-shot as published; dashed: BLIP-2 protocol re-run in our code. Star: encoder ensemble with ITM
-reranking.}
+\includegraphics[width=\columnwidth]{figures/v2_stages_flickr1k_v3.pdf}
+\caption{T\RA I R@1 along the v2 chain on Flickr30k 1K for four encoders (from the v3 run; CV weights, ``off''
+components keep the previous value). Star: 4-encoder ensemble after BLIP-2 reranking; last column: v3 with VLM
+verification (zero-shot and FT). Dotted: BLIP-2 zero-shot as published; dashed: BLIP-2 protocol re-run in our code.}
 \label{fig:v2stages}
 \end{figure}
+
+\subsection{Version 3: Results}
+\label{sec:v3res}
+v3 was run as one more job on the same A100 (6\,h\,56\,min for both benchmarks, of which the VLM took about
+3\,h), with all weights again chosen by 2-fold CV over images. The run recomputes every v2 row; they agree with
+Tables~\ref{tab:v2chain}--\ref{tab:v2final} within 0.02 R@1. Table~\ref{tab:v3} lists the cascade on both
+benchmarks.
+
+\begin{table}[t]
+\centering
+\caption{v3 cascade, T\RA I on Flickr30k 1K (5000 queries) and COCO 5K (25{,}010 queries), 2-fold CV over images.
+Each row adds one step to the row above. ``off'': CV chose weight~0. FT: uses a cross-encoder fine-tuned on the
+Flickr30k training split (separate protocol).}
+\label{tab:v3}
+\setlength{\tabcolsep}{2pt}
+\begin{tabular}{l ccc ccc}
+\toprule
+& \multicolumn{3}{c}{Flickr30k 1K} & \multicolumn{3}{c}{COCO 5K} \\
+\cmidrule(lr){2-4}\cmidrule(lr){5-7}
+System & R@1 & R@5 & R@10 & R@1 & R@5 & R@10 \\
+\midrule
+v2 (3 enc.) + BLIP-2               & 89.66 & 98.42 & 99.26 & 68.21 & 87.80 & 92.81 \\
++ SigLIP2 So400m (4 enc.)          & 90.04 & 98.28 & 99.32 & 68.26 & 87.82 & 92.88 \\
++ BLIP-L ITM (COCO)                & 90.02 & 98.30 & 99.36 & 68.53 & \best{88.15} & \best{93.06} \\
++ Qwen2.5-VL check (v3)            & \best{90.40} & \best{98.54} & 99.36 & \best{69.14} & \best{88.15} & \best{93.06} \\
+\midrule
+v3 + BLIP-L (Flickr), FT           & 90.30 & 98.46 & 99.38 & -- & -- & -- \\
+\midrule
+BLIP-2 protocol, re-run            & 89.44 & 98.08 & 98.92 & -- & -- & -- \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\emph{Which steps help.} On Flickr30k the fourth encoder lifts the ensemble from 89.66 to 90.04 R@1. SigLIP2
+So400m is also the strongest single first stage (image-only 79.08, hybrid 81.96, v2 chain 88.04 R@1). The BLIP ITM-large
+cross-encoder does not help on Flickr30k (CV gave it weight 0 and 0.2), but it does on COCO (+0.27 R@1, weight 0.2
+and 0.4), where the candidates are harder to order. VLM verification helps on both: +0.38 R@1 on Flickr30k
+($M=8$, weight 0.3) and +0.61 on COCO ($M=4$, the only value we offered there, weight 0.3). The FT variant does
+not improve on the zero-shot v3 (90.30 vs.\ 90.40), so we use no Flickr30k training data in the main system.
+
+\emph{Significance.} On Flickr30k, v3 is 0.96 R@1 above BLIP-2's own protocol re-run in our code (95\% CI [0.32,
+1.62], $p=0.003$); the 4-encoder stage before the two v3 stage-2 steps was already 0.60 ahead (CI [0.00, 1.20],
+$p=0.06$). Those two steps \emph{together} (BLIP ITM-large and VLM verification), measured against the 4-encoder
+ensemble with BLIP-2, add 0.36 R@1 on Flickr30k, which is not significant (CI [$-0.14$, 0.86]), and 0.88 R@1 on
+COCO, which is (CI [0.58, 1.19]). We did not run a separate significance test for the VLM step; its increments
+over the preceding row of Table~\ref{tab:v3} are +0.38 and +0.61. Against v1, v3 gains 2.0 R@1 on Flickr30k and 3.3
+on COCO (CLIP B/32 first stage).
+
+\emph{A simpler baseline with SigLIP~2.} Replacing the v1 encoder by SigLIP~2 and keeping the v1 protocol
+(hybrid first stage, BLIP-2 on the top-16) already gives 90.04 / 97.98 / 98.68 on Flickr30k. At R@1 this equals
+the 4-encoder ensemble with BLIP-2 (90.04; difference 0.00, CI [$-0.56$, 0.54], $p=0.99$), so on Flickr30k the
+ensemble and the larger candidate pool improve R@5 and R@10 (98.28 / 99.32) but not R@1 over this baseline; v3 is
+0.36 R@1 above it (not tested for significance). On COCO the ensemble does help at R@1: the same baseline gives
+67.26 / 85.10 / 88.64, 1.00 R@1 below the ensemble (CI [0.70, 1.28]).
+
+\emph{Cost.} The VLM scored 43K pairs on Flickr30k and 110K on COCO at 12--18 pairs/s. In the live system
+(SigLIP2 So400m store, 1000 queries, settings from the CV picks) v3 reaches 90.4 R@1, 98.3 R@5 and 99.2 R@10 at
+0.76\,s per query on an A100, against 0.1\,s for v2. The VLM is thus the most expensive component per unit of
+accuracy; deployments that need low latency can stop after the cross-encoder stage, which already reaches 90.0 R@1.
 
 \subsection{Comparison with Published Results}
 Table~\ref{tab:published} places our system next to published Flickr30k 1K results. The numbers are copied
@@ -644,15 +741,23 @@ With the v2 additions (Section~\ref{sec:v2res}) the system reaches 89.7 R@1 with
 reported for BLIP-2 ViT-g under the same protocol, and 98.4 R@5 and 99.3 R@10, above all reranked baselines that
 are not fine-tuned on Flickr30k and close to the R@10 of BEiT-3 (99.5). The single-encoder v2 systems lie between
 89.8 and 89.9 R@1 (the L/14 row in the table); we list it for completeness but did not select it in advance.
-Re-running BLIP-2's protocol in our code gives 89.44, and the gap of v2 to it (+0.22 R@1) is not significant. We
-therefore do not claim a new state of the art: v2 matches the strongest zero-shot reranked model at R@1, improves
-R@5 and R@10, and does so without training, while BEiT-3, fine-tuned on Flickr30k, remains ahead at R@1 (90.3).
+Re-running BLIP-2's protocol in our code gives 89.44, and the gap of v2 to it (+0.22 R@1) is not significant.
+
+v3 (Section~\ref{sec:v3res}) reaches 90.4 R@1, the highest R@1 in Table~\ref{tab:published}: 0.7 above the
+published BLIP-2 ViT-g, 0.96 above BLIP-2's protocol re-run in our code (a significant gap, CI [0.32, 1.62]), and
+0.1 above BEiT-3, which is fine-tuned on Flickr30k while v3 uses no Flickr30k training. The 0.1 gap to BEiT-3 is
+far below the standard error of R@1 on 5000 queries (about 0.4), and BEiT-3 remains ahead at R@5 (98.7 vs.\ 98.5)
+and R@10 (99.5 vs.\ 99.4), so we describe v3 as on par with the best fine-tuned model in the table, not as better.
+Two further caveats apply: the table lists the systems we compare with, not every published result, and the VLM
+verifier was trained on large public corpora that may contain Flickr30k captions (marked $\ast$), a risk shared by
+all web-scale pre-trained models but harder to rule out for an instruction-tuned VLM.
 
 \begin{table}[t]
 \centering
 \caption{T\RA I on Flickr30k 1K: published results (numbers from the cited papers) and ours. ZS: no
 Flickr30k training; ``COCO'' marks models fine-tuned on COCO; FT: fine-tuned on Flickr30k. $\dagger$: with
-ITM reranking of the top-$k$.}
+ITM reranking of the top-$k$. $\ast$: the Qwen2.5-VL verifier was trained on large public corpora that may include
+Flickr30k captions; we do no Flickr30k training ourselves.}
 \label{tab:published}
 \setlength{\tabcolsep}{3.5pt}
 \begin{tabular}{l l ccc}
@@ -679,6 +784,9 @@ SigLIP hybrid + BLIP-2$^\dagger$          & ZS, COCO    & 88.3 & 97.3 & 97.9 \\
 \multicolumn{5}{l}{\emph{Ours v2 (frozen models, no training; CV-selected pool, $k\le 64$)}} \\
 v2 ensemble + BLIP-2$^\dagger$            & ZS, COCO    & 89.7 & 98.4 & 99.3 \\
 v2 L/14 + BLIP-2$^\dagger$                & ZS, COCO    & 89.9 & 98.3 & 99.2 \\
+\multicolumn{5}{l}{\emph{Ours v3 (+ SigLIP2, BLIP-L, Qwen2.5-VL verification)}} \\
+v3$^\dagger$                              & ZS, COCO$^\ast$ & \best{90.4} & 98.5 & 99.4 \\
+v3 + Flickr-trained BLIP-L$^\dagger$      & FT          & 90.3 & 98.5 & 99.4 \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -708,7 +816,8 @@ R@1, against 71.8, 77.5 and 80.8 for the hybrid strategy in the same run, so the
 to FAISS top-$k$ search. After reranking, v2 gives 89.1, 88.9 and 89.7 R@1 (offline: 89.76, 89.94, 89.82). On
 1000 queries these live differences to v1 (+0.4, 0.0, +0.7) are within the standard error of about one point;
 the significant comparison is the offline one on all 5000 queries (Table~\ref{tab:v2final}). Without the pauses,
-a v2 query takes 22\,ms for stage~1 and 89--128\,ms with reranking on an A100.
+a v2 query takes 22\,ms for stage~1 and 89--128\,ms with reranking on an A100. With the v3 cascade (SigLIP2 So400m
+store, same 1000 queries) the live system reaches 90.4 R@1 at 0.76\,s per query (Section~\ref{sec:v3res}).
 
 \begin{table}[t]
 \centering
@@ -816,19 +925,20 @@ BLIP-2 ITC alone (full gallery)      & 62.97 & 85.70 & 91.50 \\
 \midrule
 v1: SigLIP hybrid + BLIP-2 (top-16)  & 67.20 & 84.77 & 88.06 \\
 v1: B/32 hybrid + BLIP-2 (top-16)    & 65.81 & 82.27 & 84.99 \\
-v2: ensemble + BLIP-2 (CV $K$=32)    & \best{68.21} & \best{87.80} & \best{92.81} \\
+v2: ensemble + BLIP-2 (CV $K$=32)    & 68.21 & 87.80 & 92.81 \\
+v3: + SigLIP2, BLIP-L, Qwen2.5-VL    & \best{69.14} & \best{88.15} & \best{93.06} \\
 \midrule
-BEiT-3 (as reported in~\cite{li2023blip2})  & 67.2 & 87.7 & \best{92.8} \\
-BLIP-2 ViT-g, fine-tuned on COCO     & \best{68.3} & 87.7 & 92.6 \\
+BEiT-3 (as reported in~\cite{li2023blip2})  & 67.2 & 87.7 & 92.8 \\
+BLIP-2 ViT-g, fine-tuned on COCO     & 68.3 & 87.7 & 92.6 \\
 \bottomrule
 \end{tabular}
 \end{table}
 
 \begin{figure}[t]
 \centering
-\includegraphics[width=\columnwidth]{figures/v2_stages_coco5k.pdf}
-\caption{T\RA I R@1 along the v2 chain on COCO 5K (all queries, CV weights). Dotted: BLIP-2 ViT-g fine-tuned on
-COCO, as published.}
+\includegraphics[width=\columnwidth]{figures/v2_stages_coco5k_v3.pdf}
+\caption{T\RA I R@1 along the v2 chain on COCO 5K for four encoders (all queries, CV weights, from the v3 run);
+last column: v3 with VLM verification. Dotted: BLIP-2 ViT-g fine-tuned on COCO, as published.}
 \label{fig:v2coco}
 \end{figure}
 
@@ -850,7 +960,10 @@ paper (68.3 / 87.7 / 92.6) and the BEiT-3 numbers reported there (67.2 / 87.7 / 
 in-domain for our reranker, which is the BLIP-2 checkpoint fine-tuned for COCO retrieval, so this is not a transfer
 result; and we did not re-run BLIP-2's own protocol on COCO (it would need 3.2M ITM pairs), so the comparison is
 with published numbers only. As on Flickr30k, the remaining errors lie in the cross-encoder's ordering: the correct
-image is among the 32 candidates for 97.7\% of the queries, but ranked first for 68.2\%.
+image is among the 32 candidates for 97.7\% of the queries, but ranked first for 68.2\%. v3 addresses exactly this
+step and reaches 69.14 / 88.15 / 93.06, above both published references on all three metrics (+0.8 R@1 over BLIP-2
+fine-tuned on COCO) and significantly above the 4-encoder v2 stage (+0.88 R@1, CI [0.58, 1.19]); on COCO both the
+second cross-encoder and the VLM contribute (Table~\ref{tab:v3}).
 
 
 \subsection{Qualitative Example: Retrieval and Grounded Answering}
@@ -896,6 +1009,10 @@ in-domain for them. We cannot rule out that
 the large pre-training corpora of the captioners and encoders contain Flickr images, which applies equally
 to all compared methods.
 
+\textbf{VLM verifier.} Qwen2.5-VL was trained on large public image--text corpora whose exact content is not
+fully documented; overlap with Flickr30k or COCO captions cannot be excluded. Its contribution (+0.4 R@1 on
+Flickr30k, +0.6 on COCO) should be read with this caveat, and it raises the cost per query by about $7\times$.
+
 \textbf{Transductive methods.} Normalising over the whole set of test queries (dual softmax) can raise R@1 but
 uses information a real system does not have at query time. We report it only as a labelled ablation
 (Table~\ref{tab:v2abl}); CB-Norm, which is part of our system, uses generated captions of the gallery only.
@@ -923,7 +1040,12 @@ raises the recall of the candidate pool to 99.9\% (Flickr30k, $K=64$) and 97.7\%
 remaining errors are made by the cross-encoder when it orders the candidates, not by retrieval. Caption-bank
 hubness normalisation helps on the large COCO gallery and is neutral on Flickr30k, and object tags and detected-object
 crops did not help on either benchmark. Improving the reranker itself, rather than the first stage, is therefore
-the most promising next step.
+the most promising next step, and v3 confirms it: a stronger fourth encoder, a second cross-encoder and a VLM that
+verifies only the top candidates raise R@1 to 90.4 on Flickr30k 1K, significantly above BLIP-2's protocol in the
+same code and level with the best fine-tuned model we compare with, and to 69.1 on COCO 5K, without training any
+model. On Flickr30k, much of the R@1 level is already reached by the simpler v1 protocol with a SigLIP~2 encoder
+(90.04), whereas on COCO the full system is clearly ahead of that baseline (69.1 vs.\ 67.3). The VLM step is the
+most expensive per point of accuracy, so the cascade can stop after the cross-encoders when latency matters.
 
 \begin{thebibliography}{00}
 \bibitem{lewis2020rag} P. Lewis \emph{et al.}, ``Retrieval-augmented generation for knowledge-intensive NLP
@@ -978,6 +1100,11 @@ vectors, orthogonal transformations and the inverted softmax,'' in \emph{Proc. I
 querybank normalisation,'' in \emph{Proc. CVPR}, 2022.
 \bibitem{cheng2021camoe} X. Cheng, H. Lin, X. Wu, F. Yang, and D. Shen, ``Improving video-text retrieval by
 multi-stream corpus alignment and dual softmax loss,'' arXiv:2109.04290, 2021.
+\bibitem{tschannen2025siglip2} M. Tschannen \emph{et al.}, ``SigLIP 2: Multilingual vision-language encoders with
+improved semantic understanding, localization, and dense features,'' arXiv:2502.14786, 2025.
+\bibitem{bai2025qwen25vl} S. Bai \emph{et al.}, ``Qwen2.5-VL technical report,'' arXiv:2502.13923, 2025.
+\bibitem{lin2024vqascore} Z. Lin \emph{et al.}, ``Evaluating text-to-visual generation with image-to-text
+generation,'' in \emph{Proc. ECCV}, 2024.
 \bibitem{efron1993bootstrap} B. Efron and R. J. Tibshirani, \emph{An Introduction to the Bootstrap}. Chapman \&
 Hall, 1993.
 \end{thebibliography}

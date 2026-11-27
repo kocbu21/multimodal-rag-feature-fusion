@@ -154,8 +154,34 @@ Canlı arama: `python app.py --store indexes/flickr1k_multi_siglip-base-patch16-
 (store'a önce `python scripts/build_index.py --upgrade <store>` ile v2 vektörleri eklenmeli). GPU koşusu için
 adım adım talimatlar: `docs/GPU_RUNBOOK.md`.
 
+## v3: sıralama aşamasını güçlendirme
+
+v2'den sonra doğru görsel aday listesinde neredeyse her zaman var (Flickr recall@64 %99.9); kalan hatalar
+sıralamada. v3 bu yüzden ek hesaplamayı sıralamaya harcıyor (hepsi eğitimsiz, CV ile seçiliyor):
+
+| Adım | Flickr30k R@1 | COCO R@1 |
+|---|---:|---:|
+| v2 (3 encoder) + BLIP-2 | 89.66 | 68.21 |
+| + SigLIP2 So400m/14@384 (4. encoder) | 90.04 | 68.26 |
+| + BLIP ITM-large (COCO) yeniden sıralayıcı | 90.02 | 68.53 |
+| + Qwen2.5-VL-7B ile ilk M adayı evet/hayır doğrulama (**v3**) | **90.40** | **69.14** |
+
+- Flickr30k: 90.40 / 98.54 / 99.36. Aynı kodda koşturulan BLIP-2 protokolüne göre +0.96 R@1 (%95 CI [0.32, 1.62],
+  p=0.003); yayınlanmış BLIP-2 89.7, Flickr'da eğitilmiş BEiT-3 90.3 (R@5/R@10'da BEiT-3 hâlâ önde).
+- COCO 5K: 69.14 / 88.15 / 93.06; yayınlanmış BLIP-2 (COCO FT) 68.3 / 87.7 / 92.6 ve BEiT-3 67.2 / 87.7 / 92.8.
+- Maliyet: VLM adımı sorgu başına ~0,6 s ekliyor (canlı v3: 0,76 s/sorgu, 90.4 R@1). Düşük gecikme gerekiyorsa
+  VLM'den önce durulabilir (90.0 R@1).
+- Flickr'da eğitilmiş yeniden sıralayıcıyla FT varyantı katkı yapmadı (90.30); ana sistem Flickr verisiyle eğitilmiş
+  hiçbir model kullanmıyor.
+
+```bash
+bash scripts/pipelines/run_v3.sh            # ya da: sbatch ile scripts/pipelines/v2_slurm.sbatch içinde run_v3.sh
+```
+
+Sonuçlar: `results/tables/{flickr1k,coco5k}_v2_v3.md`, `results/json/*_v2_v3.json`, canlı ayarlar `configs/v3_*.yaml`.
+
 ## Rapor
 
-`report/report.pdf` (IEEE konferans formatı, İngilizce, 11 sayfa, v1 + v2). Kaynak: `report/report.tex`. Grafikler
+`report/report.pdf` (IEEE konferans formatı, İngilizce, v1 + v2 + v3). Kaynak: `report/report.tex`. Grafikler
 `python scripts/make_figures.py` ile `report/figures/` altına üretilir. PDF'i yeniden derlemek için `report/`
 klasörünü Overleaf'e yükleyebilir ya da yerel bir LaTeX derleyicisi (TeX Live, MiKTeX, Tectonic) kullanabilirsin.

@@ -249,3 +249,31 @@ Final (ensemble + BLIP-2 ITM, CV K; CV gave the ITC term weight 0 in stage 2 bec
 - Dual softmax over test queries (transductive, not part of the system) hurt with the fixed temperature (81.96 / 58.33).
 - Live path (1000 queries, CV-derived settings): 89.1 / 88.9 / 89.7 R@1 with reranking, 86.1 / 85.9 / 85.8 for stage 1;
   22 ms per query for stage 1 and 89-128 ms with reranking on an A100.
+
+# Part 8: v3 results (stage-2 ordering)
+
+One more A100 run (6 h 56 min, VLM about 3 h). v3 = 4-encoder ensemble (+ SigLIP2 So400m/14@384) -> BLIP-2 ITM
+-> + BLIP ITM-large (COCO) -> Qwen2.5-VL-7B yes/no verification of the top-M (VQAScore-style log-odds), all with
+greedy 2-fold CV and weight 0 allowed. FT variant (Flickr30k only) adds BLIP ITM-large fine-tuned on Flickr30k.
+Tables: `results/tables/{flickr1k,coco5k}_v2_v3.md`; picks and CIs: `results/json/*_v2_v3.json` ("v3", "significance").
+
+| step | Flickr30k R@1 / R@5 / R@10 | COCO 5K R@1 / R@5 / R@10 |
+|---|---|---|
+| v2 (3 encoders) + BLIP-2 | 89.66 / 98.42 / 99.26 | 68.21 / 87.80 / 92.81 |
+| + SigLIP2 So400m (4 encoders) | 90.04 / 98.28 / 99.32 | 68.26 / 87.82 / 92.88 |
+| + BLIP ITM-large (COCO) | 90.02 / 98.30 / 99.36 (w 0 / 0.2) | 68.53 / 88.15 / 93.06 (w 0.2 / 0.4) |
+| + Qwen2.5-VL verification = v3 | **90.40 / 98.54 / 99.36** (M=8, w 0.3) | **69.14 / 88.15 / 93.06** (M=4, w 0.3) |
+| FT variant (+ BLIP-L Flickr) | 90.30 / 98.46 / 99.38 | - |
+
+- Flickr: v3 vs BLIP-2 protocol re-run (89.44): +0.96 [0.32, 1.62], p=0.003. v3 vs 4-encoder stage: +0.36
+  [-0.14, 0.86], not significant. This is BLIP-L + VLM together. Published: BLIP-2 89.7 / 98.1 / 98.9,
+  BEiT-3 FT 90.3 / 98.7 / 99.5.
+- COCO: v3 vs 4-encoder stage (again BLIP-L + VLM together): +0.88 [0.58, 1.19]. Published (BLIP-2 Table 5):
+  BLIP-2 ViT-g COCO-FT 68.3 / 87.7 / 92.6, BEiT-3 67.2 / 87.7 / 92.8.
+- VLM step alone (vs the preceding table row): +0.38 Flickr, +0.61 COCO; no separate significance test.
+- Simpler baseline, SigLIP2 with the v1 protocol (BLIP-2 on top-16): Flickr 90.04 / 97.98 / 98.68, same R@1 as the
+  4-encoder ensemble (delta 0.00, CI [-0.56, 0.54], p=0.99); the ensemble only helps R@5/R@10 there.
+  COCO 67.26 / 85.10 / 88.64, ensemble +1.00 R@1 (CI [0.70, 1.28]).
+- SigLIP2 So400m: image only 79.08 (Flickr) / 52.13 (COCO); best single v2 chain 88.04 / 65.09.
+- Live (SigLIP2 store, 1000 Flickr queries, v3 config): 90.4 / 98.3 / 99.2 at 0.76 s/query (v2: ~0.1 s).
+- VLM throughput 12-18 pairs/s on an A100 (bf16, at most 256 visual tokens); 43K pairs Flickr, 110K COCO.
